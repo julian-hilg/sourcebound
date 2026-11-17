@@ -2,7 +2,7 @@ import { Select, copyText, defineTool, openContextMenu, useSetting, useToolState
 import { ConfirmButton } from "../kit";
 import { z } from "zod";
 import { api, paths, type Detail, type Note } from "../data/api";
-import { Status, projectOf, useDetail, when } from "./lib";
+import { Status, projectOf, show, useDetail, when } from "./lib";
 
 /**
  * The deliverables manager: what exists under deliverables/, and what is wanted (notes with a
@@ -95,7 +95,7 @@ function Deliverables() {
                   </td>
                   <td>{f.kind || "–"}</td>
                   <td>
-                    <button className="sb-ref" onClick={() => void wb.run("panel.open", { toolId: "deliverable" })}>
+                    <button className="sb-ref" onClick={() => void show(wb, "deliverable")}>
                       Read
                     </button>
                     {f.pdf && (

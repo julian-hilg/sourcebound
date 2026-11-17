@@ -3,7 +3,7 @@ import { z } from "zod";
 import { api, paths, useApi, type SystemReport } from "../data/api";
 import { CommandLine, EmptyState, KeyValue, PanelBody, Section, StatTiles, StatusPill, bytes } from "../kit";
 import { prefs } from "../prefs";
-import { num } from "./lib";
+import { num, show } from "./lib";
 
 /**
  * What is installed and configured on this machine (`sb doctor --json`). The app shows what
@@ -21,7 +21,7 @@ function System() {
   const errors = s.problems.filter((p) => p.level === "error");
   const todo = s.setup.filter((x) => !x.done);
   const stored = s.storage.reduce((sum, x) => sum + (x.bytes ?? 0), 0);
-  const open = (toolId: string) => void wb.run("panel.open", { toolId });
+  const open = (toolId: string) => void show(wb, toolId);
   return (
     <PanelBody
       head={

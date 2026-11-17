@@ -3,7 +3,7 @@ import { z } from "zod";
 import { api, paths, useApi, type Lake, type LakeTable, type QueryResult } from "../data/api";
 import { DataGrid, EmptyState, KeyValue, SplitPane, StatusDot, StatusPill, toCsv } from "../kit";
 import { prefs } from "../prefs";
-import { downloadText, matches, num, when } from "./lib";
+import { downloadText, matches, num, show, when } from "./lib";
 
 /**
  * The data lake: every table with its contract, columns, a preview of its rows and the
@@ -30,7 +30,7 @@ function LakePanel() {
   if (!lake) return <EmptyState>{entry.error ?? "Opening the catalog…"}</EmptyState>;
   const shown = lake.tables.filter((t) => matches(state.query, t.name, t.contract?.title, t.comment));
   const schemas = [...new Set(shown.map((t) => t.schema))];
-  const openSql = (t: LakeTable) => void wb.run("panel.open", { toolId: "sql", state: { target: "lake", sql: selectFrom(t), history: [] } });
+  const openSql = (t: LakeTable) => void show(wb, "sql", { state: { target: "lake", sql: selectFrom(t), history: [] }, patch: { target: "lake", sql: selectFrom(t) } });
   const list = (
     <nav aria-label="Tables">
       {schemas.map((schema) => (

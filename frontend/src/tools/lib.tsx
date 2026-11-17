@@ -116,8 +116,25 @@ export const matches = (query: string, ...fields: (string | null | undefined)[])
 /** A count or measure in the person's number format. */
 export const num = (v: number | null | undefined, digits = 0): string => (v === null || v === undefined ? "–" : v.toLocaleString(prefs.locale, { maximumFractionDigits: digits }));
 
-/** Open a panel in the link group the workspaces use, so it follows the current selection. */
-export const openLinked = (wb: Werkbank, toolId: string, state?: unknown) => wb.run("panel.open", { toolId, link: "1", ...(state !== undefined ? { state } : {}) });
+/**
+ * Go to the open panel of a tool, or open one when none is open. A second panel of the same tool opens only when
+ * the person drags the tool from the Tools list into the layout, as a click there does (Werkbank 0.6). `state` is
+ * the whole state of a new panel; `patch` is merged over the state of an open one (default: `state`), so a hand-off
+ * such as a statement for the SQL console keeps that console's history.
+ */
+export const show = async (
+  wb: Werkbank,
+  toolId: string,
+  { state, patch = state, link }: { state?: Record<string, unknown>; patch?: Record<string, unknown>; link?: "1" } = {},
+) => {
+  const id = wb.openPanelOf(toolId);
+  if (!id) return wb.run("panel.open", { toolId, ...(link ? { link } : {}), ...(state ? { state } : {}) });
+  if (patch) await wb.run("panel.setState", { id, patch });
+  return wb.run("panel.focus", { id });
+};
+
+/** Show a panel in the link group the workspaces use, so a new one follows the current selection. */
+export const openLinked = (wb: Werkbank, toolId: string) => show(wb, toolId, { link: "1" });
 
 /** Select a lake table for linked panels and bring up the Lake panel. */
 export const showTable = async (wb: Werkbank, table: string) => {

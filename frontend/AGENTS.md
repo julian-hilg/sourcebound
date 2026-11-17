@@ -40,6 +40,10 @@ Data: Lake, SQL console, Connections, Jobs, Fetch log. System: System, Assets.
 
 Link topics: `project`, `hypothesis`, `claim`, `result`, `piece`, `table`. The preset workspaces put every panel
 into link group 1; open a panel that should follow the selection with `openLinked` from `tools/lib.tsx`.
+Every button or menu entry that brings up another panel uses `show` (or `openLinked`) from `tools/lib.tsx`, never
+`panel.open` directly: it goes to the tool's open panel and opens a new one only when none is open. A second panel
+of a tool comes only from dragging the tool into the layout (the owner's rule, 2026-11-17). Hand-offs pass
+`patch`, which is merged over the open panel's state (the SQL console keeps its history).
 
 ## Rules of this app
 

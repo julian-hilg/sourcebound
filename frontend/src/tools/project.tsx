@@ -2,7 +2,7 @@ import { defineTool, useWerkbank } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, type Detail } from "../data/api";
 import { KeyValue } from "../kit";
-import { counts, projectOf, useDetail, when } from "./lib";
+import { counts, projectOf, show, useDetail, when } from "./lib";
 
 const PHASES = ["brief", "landscape", "hypotheses", "data", "analysis", "review", "deliverables", "published"];
 /** The gate a person passes after a phase: G1 after the brief, G2 after the hypotheses, G3 before publishing. */
@@ -25,7 +25,7 @@ function Project() {
           {d.lang} · created {d.created || "–"}
         </span>
         <span className="sb-grow" />
-        <button className="wb-button" onClick={() => void wb.run("sb.check", { project: id }).then(() => wb.run("panel.open", { toolId: "check" }))}>
+        <button className="wb-button" onClick={() => void wb.run("sb.check", { project: id }).then(() => show(wb, "check"))}>
           Check
         </button>
       </div>

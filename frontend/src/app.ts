@@ -166,6 +166,8 @@ A **study** answers one question: brief, hypotheses frozen before the analysis, 
 
 Panels in one link group follow each other: a project selected in *Projects*, a piece selected in *Pieces*, a number clicked in the *Deliverable*, a table selected in the *Lake*.
 
+A click on a tool in the side bar, or a button such as *Open in SQL console*, goes to that tool's panel when one is open; a dot in the Tools list marks such tools. To have a second panel of the same tool, drag the tool from the Tools list into the layout.
+
 ## Writing a piece
 
 1. Type a title in *Pieces* and press *Add piece*. It becomes a folder under \`pieces/\`.
