@@ -310,7 +310,11 @@ def render(target: str, template_id: str, *, design_id: str | None = None, proje
         raise ValueError("not rendered:\n  " + "\n  ".join(problems))
     out = out_dir(doc, template_id)
     out.mkdir(parents=True, exist_ok=True)
-    files = reg.renderers[tpl["kind"]].fn(doc, tpl, design, out) or []
+    try:
+        files = reg.renderers[tpl["kind"]].fn(doc, tpl, design, out) or []
+    except PermissionError as e:                    # Windows: a viewer holds a file of the last render
+        raise RuntimeError(f"not rendered: {e.filename or out} is open in another program (a PDF or image viewer?); "
+                           "close it and render again") from e
     notes: list[str] = []
     if isinstance(files, tuple):                    # a renderer may return (files, notes): what it adjusted or could not do
         files, notes = list(files[0]), [str(n) for n in files[1]]
