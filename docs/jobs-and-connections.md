@@ -42,13 +42,24 @@ before it reaches the database. This is a look at the data: nothing is archived,
 is recorded. To build a table from a database, use `sourcebound.sources.query` in a pipeline,
 which archives the extract and the query text.
 
-A database source is a register entry with `connection_env:`:
+A database source is a register entry with a `database:` block: SQL Server, PostgreSQL,
+MySQL / MariaDB, or a SQLite or DuckDB file. Make one in the web view (Connections panel,
+"New database connection…": a form like the Werkbank starter's, with Test connection) or here:
 
 ```sh
-sb datasource add warehouse --name "Order warehouse" --access database --connection-env WAREHOUSE_URI
-# then, in the shell that runs sb:  WAREHOUSE_URI="mssql://user:password@host:1433/database"
-uv sync --extra sql
+sb datasource add warehouse --name "Order warehouse" --driver mssql --server sql-01 --database Orders --auth windows
+sb datasource add shop --name "Shop" --driver postgresql --server db-01 --database shop --auth sql --user reader --password-env SHOP_PW
+sb datasource add local --name "Local copy" --driver duckdb --path D:/data/warehouse.duckdb
+sb datasource set warehouse --trust-server-certificate     # change a field
+sb datasource test warehouse                               # connects and prints the server's version
+sb datasource rm warehouse                                 # only while nothing was read from it
+uv sync --extra sql                                        # SQL Server, PostgreSQL, MySQL (connectorx)
 ```
+
+The password is never in a file. It is typed once per session in the web view and held in the
+memory of `sb ui`, or read from the environment variable `password_env` names (for pipelines
+and jobs); `sb datasource test` asks for it in a terminal. An older entry with
+`connection_env:` (a whole URI in an environment variable) keeps working.
 
 The guard is a second line of defence, not the first: give the account behind the URI read
 permissions only.

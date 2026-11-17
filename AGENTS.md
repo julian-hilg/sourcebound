@@ -114,7 +114,7 @@ Custom and private sources (a provider's API, an internal database, files sent b
   `<registry>/datasources/<id>/docs/` and shared by all projects. Read it there before writing
   a pipeline; archive the new version when the provider changes it.
 - Credentials are only those the provider issued for this access. The register entry names an
-  environment variable (`auth: {env: ...}` for a token, `connection_env:` for a database
+  environment variable (`auth: {env: ...}` for a token, `database: {password_env: ...}` or `connection_env:` for a database
   URI); the secret itself never enters a file, a manifest or a log. No website logins, no
   shared or borrowed accounts.
 - Manual files go into the raw archive with `sb ingest FILE --source <id>`; database extracts

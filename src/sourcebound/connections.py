@@ -54,13 +54,15 @@ def read_only(query: str) -> str:
 
 def targets() -> list[dict]:
     """What `sql` can be run against: the lake, and every source with a database connection."""
+    from . import databases
     out = [{"id": "lake", "title": "Data lake", "ready": True, "hint": "tables as <schema>.<table>"}]
     for s in sources.listing():
         e = sources.entry(s["id"])
-        env = e.get("connection_env")
-        if env:
-            out.append({"id": s["id"], "title": e.get("name") or s["id"], "ready": bool(os.environ.get(env)),
-                        "hint": f"URI from the environment variable {env}" + ("" if os.environ.get(env) else " (not set)")})
+        if isinstance(e.get("database"), dict) or e.get("connection_env"):
+            ok, hint = databases.ready(s["id"])
+            test = databases.last_test(s["id"])
+            out.append({"id": s["id"], "title": e.get("name") or s["id"], "ready": ok, "hint": hint,
+                        "tested": test["status"] if test else None})
     return out
 
 
@@ -78,15 +80,8 @@ def sql(target: str, query: str, *, limit: int = 500) -> dict:
         finally:
             con.close()
     else:
-        env = sources.entry(target).get("connection_env")
-        if not env:
-            raise ValueError(f"{target} is not a database source (no `connection_env:` in its register entry)")
-        if not os.environ.get(env):
-            raise RuntimeError(f"set the environment variable {env} to the database URI of {target}, then start `sb ui` again")
-        try:
-            df = pl.read_database_uri(q, os.environ[env])
-        except ModuleNotFoundError as e:
-            raise RuntimeError("reading a database by URI needs connectorx: uv sync --extra sql") from e
+        from . import databases
+        df = databases.read(target, q)
     total = df.height
     df = df.head(limit)
     rows = [[v if isinstance(v, (int, float, bool, str)) or v is None else str(v) for v in r] for r in df.rows()]
@@ -116,11 +111,26 @@ def status() -> list[dict]:
             stops = blocked(s["id"])
         except OSError:
             stops = {}
+        db = None
+        if isinstance(e.get("database"), dict):
+            from . import databases
+            try:
+                spec, problem = databases.check(e["database"]), None
+            except databases.SpecError as err:
+                spec, problem = None, err.errors
+            ok, why = databases.ready(s["id"])
+            db = {"spec": spec or e["database"], "problems": problem, "where": databases.describe(s["id"], spec),
+                  "needs_password": bool(spec and databases.needs_password(spec)),
+                  "password_in_session": databases.has_session_secret(s["id"]), "ready": ok, "why": why,
+                  "last_test": databases.last_test(s["id"])}
+            if spec and spec.get("password_env"):
+                envs.append(spec["password_env"])
         out.append({**s, "url": e.get("url", ""), "publisher": e.get("publisher", ""), "license": e.get("license", ""),
+                    "connection": db,
                     "terms": e.get("terms", ""), "tables": e.get("tables") or [], "mcp": e.get("mcp", ""),
                     "frequency": e.get("frequency", ""), "checked": str(e.get("checked") or ""),
                     "needs_env": [{"name": x, "set": bool(os.environ.get(x))} for x in envs],
-                    "database": bool(e.get("connection_env")),
+                    "database": bool(e.get("connection_env")) or db is not None,
                     "last_request": {"ts": last.get("ts"), "status": last.get("status")} if last else None,
                     "stopped_hosts": sorted(stops)})
     return out

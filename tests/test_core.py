@@ -882,6 +882,69 @@ name: analyst  % not a comment
     assert "```\nname: analyst  % not a comment\n  -- kept as written\n```" in md
 
 
+def test_database_connections_are_described_tested_and_read_only(tmp_path, monkeypatch):
+    import sqlite3
+
+    import duckdb
+
+    from sourcebound import config, connections, databases, sources
+    from sourcebound.cli import main
+    _init(tmp_path)
+    db = tmp_path / "shop.sqlite"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE prices (id INTEGER, price REAL)")
+    con.executemany("INSERT INTO prices VALUES (?, ?)", [(1, 9.5), (2, 12.0)])
+    con.commit()
+    con.close()
+    # created field by field, as the web view's form does it
+    with pytest.raises(databases.SpecError) as err:
+        databases.save("shop", name="Shop", spec={"driver": "mssql", "server": "bad host", "port": "x", "auth": "sql"})
+    assert set(err.value.errors) == {"server", "port", "database", "user"}
+    made = databases.save("shop", name="Shop", spec={"driver": "sqlite", "path": str(db)})
+    assert made["created"] and made["before"] is None
+    entry = sources.entry("shop")
+    assert entry["access"] == "database" and entry["database"]["driver"] == "sqlite" and "password" not in str(entry)
+    assert databases.test("shop") == {**databases.last_test("shop"), "status": "ok"}
+    assert connections.sql("shop", "SELECT price FROM prices ORDER BY id")["rows"] == [[9.5], [12.0]]
+    with pytest.raises(ValueError):
+        connections.sql("shop", "DELETE FROM prices")
+    t = next(x for x in connections.targets() if x["id"] == "shop")
+    assert t["ready"] and t["tested"] == "ok"
+    # a DuckDB file, changed through the command line
+    duck = tmp_path / "w.duckdb"
+    c = duckdb.connect(str(duck))
+    c.execute("CREATE TABLE t AS SELECT 42 AS x")
+    c.close()
+    main(["datasource", "set", "shop", "--driver", "duckdb", "--path", str(duck)])
+    assert connections.sql("shop", "SELECT x FROM t")["rows"] == [[42]]
+    f = config.hub().datasource("shop")
+    assert f.read_text(encoding="utf-8").startswith("# Data source register entry")     # the rest of the entry is kept
+    # client-server URIs: the password from the session, else from the variable the entry names
+    spec = databases.check({"driver": "mssql", "server": "sql-01", "database": "Research", "auth": "sql",
+                            "user": "ana", "password_env": "SHOP_PW", "trust_server_certificate": True})
+    with pytest.raises(RuntimeError, match="SHOP_PW"):
+        databases.uri("wh", spec)
+    monkeypatch.setenv("SHOP_PW", "p@ss:w/rd")
+    assert databases.uri("wh", spec) == "mssql://ana:p%40ss%3Aw%2Frd@sql-01:1433/Research?encrypt=true&trust_server_certificate=true"
+    databases.remember("wh", "session")
+    assert "ana:session@" in databases.uri("wh", spec)
+    databases.forget("wh")
+    win = databases.check({"driver": "mssql", "server": "sql-01", "database": "R", "auth": "windows", "user": "ignored"})
+    assert databases.uri("wh", win) == "mssql://sql-01:1433/R?trusted_connection=true&encrypt=true"
+    pg = databases.check({"driver": "postgresql", "server": "db", "database": "d", "auth": "none", "ssl_mode": "require"})
+    assert databases.uri("pg", pg) == "postgresql://db:5432/d?sslmode=require"
+    with pytest.raises(databases.SpecError):
+        databases.check({"driver": "postgresql", "server": "db", "database": "d", "auth": "windows"})
+    # undo: remove puts nothing back by itself, restore does; an entry with extracts stays
+    gone = databases.remove("shop")
+    assert sources.entry("shop") == {}
+    databases.restore("shop", gone["before"])
+    assert sources.entry("shop")["database"]["driver"] == "duckdb"
+    (config.hub().raw_root / "shop").mkdir(parents=True)
+    with pytest.raises(PermissionError):
+        databases.remove("shop")
+
+
 def test_web_view_starts_once_per_port(monkeypatch, capsys):
     from sourcebound import ui
     first = ui.Server(("127.0.0.1", 0), ui.Handler)

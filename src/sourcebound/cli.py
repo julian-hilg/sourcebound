@@ -18,6 +18,9 @@
   sb bib sync | search "words" | add DOI | import
   sb datasource add ID --name "..." [--url U] [--access api|database|manual|...] [--auth-env VAR]
                 [--connection-env VAR] [--mcp NAME]   register entry for a custom or private source
+  sb datasource add ID --name "..." --driver mssql|postgresql|mysql|sqlite|duckdb --server H --database D
+                [--auth sql|windows|none --user U --password-env VAR | --path FILE]   a database connection
+  sb datasource set|test|rm ID [--server ...]   change, test (asks for the password) or remove one
   sb datasource docs ID FILE|URL ...         archive its API documentation / MCP tool list for good
   sb datasource list                         sources in the registry
   sb ingest FILE --source ID [--note "..."]   manual file (CSV, XLSX, PDF) into the raw archive
@@ -652,6 +655,23 @@ def cmd_source(a):
         print(text[: a.chars])
 
 
+def databases_error():
+    from .databases import SpecError
+    return SpecError
+
+
+DB_FLAGS = ("driver", "server", "port", "database", "auth", "user", "password_env", "encrypt",
+            "trust_server_certificate", "ssl_mode", "timeout", "path")
+
+
+def _db_spec(a, partial: bool = False) -> dict | None:
+    """The database fields given on the command line (`sb datasource add|set ... --driver ...`)."""
+    spec = {k: getattr(a, k) for k in DB_FLAGS if getattr(a, k, None) is not None}
+    if partial:
+        return spec
+    return spec if a.driver else None
+
+
 def cmd_datasource(a):
     from . import sources
     from .fetch import Blocked
@@ -663,14 +683,37 @@ def cmd_datasource(a):
             if not a.id or not a.name:
                 sys.exit("sb datasource add ID --name \"...\"")
             f = sources.add(a.id, name=a.name, url=a.url or "", access=a.access, auth_env=a.auth_env,
-                            connection_env=a.connection_env, mcp=a.mcp)
-            print(f"wrote {f} (status: candidate)\nnext: sb datasource docs {a.id} <API documentation or MCP tool list>")
+                            connection_env=a.connection_env, mcp=a.mcp, database=_db_spec(a))
+            print(f"wrote {f} (status: candidate)\nnext: " + (f"sb datasource test {a.id}" if a.driver else
+                  f"sb datasource docs {a.id} <API documentation or MCP tool list>"))
+        elif a.what in ("set", "test", "rm"):
+            from . import databases
+            if not a.id:
+                sys.exit(f"sb datasource {a.what} ID")
+            if a.what == "set":
+                old = databases.spec_of(a.id) or {}
+                r = databases.save(a.id, name=a.name, spec={**old, **(_db_spec(a, partial=True) or {})})
+                print(f"wrote {r['path']}\nnext: sb datasource test {a.id}")
+            elif a.what == "rm":
+                print(f"removed {databases.remove(a.id)['path']}")
+            else:
+                spec = databases.spec_of(a.id)
+                pw = None
+                if spec and databases.needs_password(spec) and not databases.password(a.id, spec) and sys.stdin.isatty():
+                    import getpass
+                    pw = getpass.getpass(f"password for {spec['user']} on {spec['server']} (not stored): ")
+                r = databases.test(a.id, pw)
+                print(f"{a.id}: {r['status']}: {r['message']}")
+                if r["status"] != "ok":
+                    sys.exit(1)
         elif a.what == "docs":
             if not a.id:
                 sys.exit("sb datasource docs ID [FILE|URL ...]")
             for x in sources.archive_docs(a.id, a.items):
                 print(f"{x['origin']}: " + (f"archived {x['file']}" if x["file"] else x["note"]) + f"  sha256 {x['sha256'][:12]}")
             print(f"{len(sources.docs(a.id))} documents in {sources.docs_dir(a.id)}")
+    except databases_error() as e:
+        sys.exit("the connection is not complete:\n" + "\n".join(f"  {k}: {v}" for k, v in e.errors.items()))
     except Blocked as e:
         sys.exit(f"not archived: {e}\n(do not work around this; save the documentation by hand and pass the file)")
     except (ValueError, OSError, RuntimeError) as e:
@@ -1000,10 +1043,20 @@ def main(argv=None):
     s.add_argument("--retry", action="store_true", help="also retry papers whose conversion failed")
     s.add_argument("--no-convert", action="store_true", help="sync: do not start the conversion")
     s.set_defaults(f=cmd_papers)
-    s = sub.add_parser("datasource"); s.add_argument("what", choices=["add", "docs", "list"])
+    s = sub.add_parser("datasource"); s.add_argument("what", choices=["add", "docs", "list", "set", "test", "rm"])
     s.add_argument("id", nargs="?"); s.add_argument("items", nargs="*")
     s.add_argument("--name"); s.add_argument("--url"); s.add_argument("--access", default="api")
     s.add_argument("--auth-env"); s.add_argument("--connection-env"); s.add_argument("--mcp")
+    g = s.add_argument_group("database connection (add, set)")
+    g.add_argument("--driver", choices=["mssql", "postgresql", "mysql", "sqlite", "duckdb"])
+    g.add_argument("--server"); g.add_argument("--port", type=int); g.add_argument("--database")
+    g.add_argument("--auth", choices=["sql", "windows", "none"], help="sql: user and password; windows: SQL Server only")
+    g.add_argument("--user"); g.add_argument("--password-env", help="NAME of the environment variable with the password")
+    g.add_argument("--encrypt", action=argparse.BooleanOptionalAction, default=None, help="SQL Server (default on)")
+    g.add_argument("--trust-server-certificate", action=argparse.BooleanOptionalAction, default=None)
+    g.add_argument("--ssl-mode", choices=["disable", "prefer", "require", "verify-full"], help="PostgreSQL")
+    g.add_argument("--timeout", type=int, help="seconds to wait when testing (default 15)")
+    g.add_argument("--path", help="sqlite and duckdb: the database file")
     s.set_defaults(f=cmd_datasource)
     s = sub.add_parser("ingest"); s.add_argument("file"); s.add_argument("--source", required=True)
     s.add_argument("--note"); s.set_defaults(f=cmd_ingest)

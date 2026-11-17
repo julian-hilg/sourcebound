@@ -74,11 +74,17 @@ def entry(source: str) -> dict:
 
 
 def add(source: str, *, name: str, url: str = "", access: str = "api", auth_env: str | None = None,
-        connection_env: str | None = None, mcp: str | None = None) -> Path:
-    """Write the register entry `<registry>/datasources/<id>.yaml` (status: candidate)."""
+        connection_env: str | None = None, mcp: str | None = None, database: dict | None = None) -> Path:
+    """Write the register entry `<registry>/datasources/<id>.yaml` (status: candidate).
+
+    `database` describes a database connection field by field (see `databases`); it makes the
+    source a database source."""
+    from . import databases
     _check_id(source)
     if access not in ACCESS:
         raise ValueError(f"access: one of {', '.join(ACCESS)}")
+    spec = databases.check(database) if database is not None else None
+    access = "database" if spec else access
     h = config.hub()
     if h.datasource(source):
         raise FileExistsError(f"{h.datasource(source)} exists -- edit it instead")
@@ -89,6 +95,8 @@ def add(source: str, *, name: str, url: str = "", access: str = "api", auth_env:
         extra += f"connection_env: {connection_env}   # environment variable with the database URI\n"
     if mcp:
         extra += f"mcp: {mcp}                 # MCP server of the provider (its tool list is archived under docs/)\n"
+    if spec:
+        extra += databases.block_text(spec)
     f = h.datasources_dir / f"{source}.yaml"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(ENTRY.format(id=source, name=json.dumps(name), url=url or '""', access=access,
@@ -175,24 +183,22 @@ def query(source: str, sql: str, *, connection=None):
 
     The extract is archived as Parquet in the raw archive with the query text in the manifest,
     so the table built from it can be rebuilt (`read_extract`) without the database.
-    Without `connection` the URI is read from the environment variable the register entry
-    names (`connection_env:`), e.g. mssql://user:password@host:1433/database, and read through
-    connectorx (`uv sync --extra sql`).  `connection` may be any DB-API or SQLAlchemy connection.
+    Without `connection` the source's register entry says how to connect: its `database:` block
+    (driver, server, ...; the password from the variable `password_env` names, see `databases`),
+    or an older `connection_env:` with a whole URI.  `connection` may be any DB-API or
+    SQLAlchemy connection.
     """
     import polars as pl
+
+    from . import databases
     _check_id(source)
     if connection is not None:
         df = pl.read_database(sql, connection)
     else:
-        env = entry(source).get("connection_env")
-        if not env:
-            raise RuntimeError(f"datasource {source}: no `connection_env:` in its register entry")
-        if not os.environ.get(env):
-            raise RuntimeError(f"datasource {source}: set the environment variable {env} to the database URI")
         try:
-            df = pl.read_database_uri(sql, os.environ[env])
-        except ModuleNotFoundError as e:
-            raise RuntimeError("reading a database by URI needs connectorx: uv sync --extra sql") from e
+            df = databases.read(source, sql)
+        except ValueError as e:
+            raise RuntimeError(f"datasource {source}: {e}") from e
     buf = io.BytesIO()
     df.write_parquet(buf)
     ref = Fetcher(source).store(buf.getvalue(), url=f"sql:{source}", content_type=TYPES[".parquet"],

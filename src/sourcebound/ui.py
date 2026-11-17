@@ -16,6 +16,7 @@
     GET  /api/lake/table?name=s.t&limit=100  rows of one table
     POST /api/sql                            {target, query, limit}: one read-only statement (`sb sql`)
     GET  /api/connections                    data sources, SQL targets, registered MCP servers
+    POST /api/connections                    {op: save | remove | restore | test | secret | forget, id, ...}  -> `sb datasource`
     GET  /api/jobs                           scheduled jobs and their log;  POST /api/jobs/run {id} runs one now
     GET  /api/assets                         designs, templates, plugins and the formats they render
     GET  /api/projects/<id>/pieces           pieces with text and renders
@@ -417,6 +418,39 @@ def connections_overview() -> dict:
             "seconds_between_requests": config.hub().min_interval}
 
 
+def connection(body: dict) -> dict:
+    """What `sb datasource add|set|test|rm` do for a database source, for the Connections panel.
+
+    {op: save, id, name?, spec, password?}   create or change; answers {path, created, before} (before: for undo)
+    {op: remove, id}                         answers {path, before}
+    {op: restore, id, text}                  the undo of save and remove
+    {op: test, id}                           connect and ask for the version
+    {op: secret, id, password}               hold a password for this session, in memory only
+    {op: forget, id}                         drop it
+    A password is never written and never returned. The page sends it with `secret` (not through
+    a command, whose input the app's history records), then runs the test.
+    """
+    from . import databases
+    op, sid = body.get("op"), str(body.get("id") or "")
+    if op == "save":
+        return databases.save(sid, name=body.get("name"), spec=body.get("spec") or {})
+    if op == "secret":
+        if not str(body.get("password") or ""):
+            raise ValueError("no password")
+        databases.remember(sid, str(body["password"]))
+        return {"id": sid, "password_in_session": True}
+    if op == "remove":
+        return databases.remove(sid)
+    if op == "restore":
+        return databases.restore(sid, str(body.get("text") or ""))
+    if op == "test":
+        return databases.test(sid)
+    if op == "forget":
+        databases.forget(sid)
+        return {"id": sid, "forgotten": True}
+    raise ValueError("op: save, remove, restore, test, secret or forget")
+
+
 def jobs_overview() -> dict:
     from . import jobs
     return {"jobs": jobs.listing(), "log": jobs.log(60), "schedule_hint": jobs.schedule_hint()}
@@ -572,6 +606,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(connections.sql(str(body.get("target") or "lake"), str(body.get("query") or ""), limit=int(body.get("limit") or 500)))
                 case ("GET", "connections"):
                     self._json(connections_overview())
+                case ("POST", "connections"):
+                    self._json(connection(body))
                 case ("GET", "jobs"):
                     self._json(jobs_overview())
                 case ("POST", "jobs", "run"):
@@ -591,7 +627,12 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"error": "not found"}, 404)
         except NotFound as e:
             self._json({"error": str(e)}, 404)
-        except (ValueError, KeyError, FileExistsError) as e:
+        except PermissionError as e:                  # a rule refused it (an entry with extracts stays)
+            self._json({"error": str(e)}, 409)
+        except ValueError as e:
+            fields = getattr(e, "errors", None)       # databases.SpecError: one message per field, for the form
+            self._json({"error": str(e).strip("'\""), **({"fields": fields} if fields else {})}, 400)
+        except (KeyError, FileExistsError, FileNotFoundError) as e:
             self._json({"error": str(e).strip("'\"")}, 400)
         except RuntimeError as e:                    # a database refused, a tool is missing: the person can act on the message
             self._json({"error": str(e)}, 422)
