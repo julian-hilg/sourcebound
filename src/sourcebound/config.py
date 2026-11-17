@@ -16,8 +16,11 @@ def find_up(name: str, start: str | Path | None = None) -> Path | None:
     """First directory at or above `start` (default: cwd) that contains `name`."""
     d = Path(start or Path.cwd()).resolve()
     for p in (d, *d.parents):
-        if (p / name).exists():
-            return p
+        try:
+            if (p / name).exists():
+                return p
+        except OSError:          # a folder above may not be readable (the root of a network share)
+            continue
     return None
 
 
