@@ -152,6 +152,24 @@ def cmd_render(a):
         print("warning: results used but not recorded:", ", ".join(m["missing_results"]))
 
 
+def cmd_deliver(a):
+    from . import deliver
+    try:
+        m = deliver.deliver(a.target, a.template, pdf=a.pdf, email=a.email, zip_it=a.zip)
+    except (KeyError, ValueError, FileNotFoundError, RuntimeError) as e:
+        _fail(e)
+    print(f"delivered {m['target']}: {m['folder']}")
+    for f in m["files"]:
+        print(f"   {f['file']}  ({f['from']})")
+    for n in m["notes"]:
+        print("note:", n)
+    if m.get("zip"):
+        print("zip:", m["zip"])
+    if m["for_review_only"]:
+        print(f"for review only: the piece has status `{m['status'] or 'none'}`; approving it is the person's decision")
+    print("nothing was sent: open, check and hand on by hand")
+
+
 def cmd_design(a):
     from . import assets
     try:
@@ -288,6 +306,12 @@ def add_parsers(sub) -> None:
     s.set_defaults(f=cmd_piece)
     s = sub.add_parser("render"); s.add_argument("target"); s.add_argument("--template", required=True); s.add_argument("--design")
     s.set_defaults(f=cmd_render)
+    s = sub.add_parser("deliver", help="render, convert and collect a piece or deliverable into one folder (nothing is sent)")
+    s.add_argument("target"); s.add_argument("--template", action="append", default=[], help="repeatable; default: the piece's template")
+    s.add_argument("--pdf", action="store_true", help="every .docx also as .pdf (Word plugin)")
+    s.add_argument("--email", nargs="?", const="", default=None, metavar="ADDRESS", help="also an unsent e-mail draft (.eml)")
+    s.add_argument("--zip", action="store_true", help="also the folder as .zip")
+    s.set_defaults(f=cmd_deliver)
     s = sub.add_parser("design"); s.add_argument("what", choices=["list", "show", "new"]); s.add_argument("id", nargs="?")
     s.add_argument("--name"); s.set_defaults(f=cmd_design)
     s = sub.add_parser("template"); s.add_argument("what", choices=["list", "add", "new"]); s.add_argument("id", nargs="?")

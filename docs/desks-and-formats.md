@@ -127,6 +127,7 @@ def register(api):
     api.scaffold("video", scaffold)           # scaffold(folder, design): a starting template
     api.command("video", setup_parser, run)   # adds `sb video ...`
     api.pack(Path(__file__).parent / "pack")  # designs/ and templates/ the plugin brings
+    api.converter(".mp4", ".gif", to_gif)     # convert(path, out) -> Path: used by `sb deliver`
 
 def render(doc, template, design, out):       # -> list of files written below `out`
     ...
@@ -137,6 +138,22 @@ def render(doc, template, design, out):       # -> list of files written below `
 Helpers: `render.fill` (numbers in, citations formatted by a callback), `render.cited`,
 `render.source_line`, `render.cite_label`, `render.plain_text`. A renderer writes only below
 `out`; the core adds `render.json` with the values shown, so staleness can be detected later.
+
+### Delivering
+
+```sh
+sb deliver p1 --template firm-report --template firm-post --pdf --email --zip
+```
+
+renders the piece (or `deliverables/NAME`) with each template, adds converted formats (`--pdf`:
+each `.docx` also as `.pdf`, through the Word plugin), and collects everything in
+`dist/deliver/<name>-<date>/` with `MANIFEST.json` (files with sha256, templates, commit, the
+numbers shown) and `README.txt`. `--email [ADDRESS]` adds an unsent e-mail (`.eml`, `X-Unsent:
+1`): subject, the text as plain text and the PDFs attached; Outlook opens it as a draft. Without
+`--template` the piece's own template is used.
+
+Nothing is sent, posted or uploaded. A piece that is not `approved` is delivered for review
+only, and the manifest and README say so.
 
 ## For an organisation
 
