@@ -177,6 +177,13 @@ private plugin: `register(api)` calls `api.pack(folder)`, and its designs and te
 found on every machine where the package is installed, with no `sb pack install`. The registry
 of a machine still wins over a plugin's pack, so one machine can try a change first.
 
+A Word template can say `sources: {word: store}` in its `template.yaml` (the default): the cited
+sources are then also in Word's own store (References > Manage Sources), so a person can cite
+them with Word's commands. `word: fields` also turns the rendered citations into Word's citation
+fields; Word then formats them in its own citation style when it updates fields, which may differ
+from the template's (seen in Word for Mac: numbered citations became author and year). `word: off`
+writes neither.
+
 Templates are made at the desk, not in the frontend: `sb template new` asks the plugin for a
 starting template built from a design, and the files are then edited with the tool the
 format belongs to (Word, an HTML editor).

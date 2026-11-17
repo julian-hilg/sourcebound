@@ -423,3 +423,47 @@ def test_twenty_pages_render_fast(desk):
     took = time.perf_counter() - start
     print(f"{len(text.split())} words rendered in {took:.2f} s")
     assert took < 2.0
+
+
+def store_of(f: Path) -> str:
+    with zipfile.ZipFile(f) as z:
+        parts = [z.read(n).decode("utf-8") for n in z.namelist() if n.startswith("customXml/item") and "Props" not in n]
+    return next((p for p in parts if "officeDocument/2006/bibliography" in p[:600]), "")
+
+
+def test_cited_sources_are_in_words_own_store(desk):
+    """References > Manage Sources lists what the text cites; the citations stay as rendered."""
+    f = render_piece(desk)
+    store = store_of(f)
+    assert store.count("<b:Source>") == 2 and "<b:Tag>W0001</b:Tag>" in store and "<b:Year>2024</b:Year>" in store
+    assert "<b:Corporate>Research Council</b:Corporate>" in store and "<b:URL>https://example.org/roadmap</b:URL>" in store
+    assert 'StyleName="IEEE"' in store                                   # numbered, as the template's source list
+    with zipfile.ZipFile(f) as z:
+        assert "CITATION" not in z.read("word/document.xml").decode("utf-8")
+    from sourcebound_word import ooxml
+    assert ooxml.read_manifest(Document(str(f)))["notes"]["word_sources"] == {"mode": "store", "in_store": 2}
+
+
+def test_a_template_can_ask_for_citation_fields_or_for_no_store(desk):
+    from sourcebound import assets
+    from sourcebound_word import ooxml, roundtrip
+    cfg = Path(assets.template("report")["folder"]) / "template.yaml"
+    doc = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    doc["sources"] = {**(doc.get("sources") or {}), "word": "fields"}
+    cfg.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    f = render_piece(desk)
+    with zipfile.ZipFile(f) as z:
+        xml = z.read("word/document.xml").decode("utf-8")
+    assert ' CITATION W0001 \\p "3" \\l 1033 ' in xml and " CITATION W0001 \\n \\l 1033 " in xml and xml.count("<w:citation/>") == 3
+    d = Document(str(f))                                                # the text a reader sees is unchanged, and so is the round trip
+    assert "saw a large move [1, p. 3]. That is a lot, says Example Institute [1]; see Table 1." in ooxml.plain(find(d, "In June"))
+    assert roundtrip.status(f)["paragraphs"]["changed"] == [] and not roundtrip.edited(f)
+    d.element.body.remove(find(d, "In June"))
+    d.save(str(f))
+    assert {"what": "citation", "key": "W-0002", "from": "[2]", "to": "[1]"} in roundtrip.refresh(f)["changes"]
+    with zipfile.ZipFile(f) as z:
+        assert " CITATION W0002 " in z.read("word/document.xml").decode("utf-8")      # still a field after the refresh
+    doc["sources"]["word"] = "off"
+    cfg.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    f.unlink()
+    assert "<b:Source>" not in store_of(render_piece(desk))        # the template's own (empty) store is left alone

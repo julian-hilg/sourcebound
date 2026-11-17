@@ -30,7 +30,7 @@ from docx.shared import Cm, Emu, Pt, RGBColor
 
 from sourcebound import render as core
 
-from . import markdown, ooxml, template as tpl
+from . import markdown, ooxml, sources as wsources, template as tpl
 
 FORMAT = {"format": "sourcebound-word", "version": 1}
 NUMERIC = re.compile(r"^(?:[\s+\-−–]?[\d.,\s]+(?:[%‰]|\s?[a-zA-Zµ€$]{1,4})?|[–—-])$")
@@ -86,6 +86,9 @@ class Writer:
         self._keep: list = []
         self.sdt_id = 9000
         self.order: list[str] = []                  # cited keys, in order of first use
+        self.word_sources = wsources.mode(template)  # fields | store | off: Word's own source store and citation fields
+        self.word_tags: dict[str, str] = {}         # source key -> its tag in Word's store
+        self.lcid = 1031 if doc.german else 1033
         self.targets: dict[str, str] = {}           # label -> "Table 2"
         self.counts = {"math": 0, "footnotes": 0, "figures_missing": []}
         self.marker = self._marker()
@@ -162,7 +165,13 @@ class Writer:
                 shown = self.cite_text(s["keys"], s["locator"], s["textual"])
                 run = p.add_run(shown)
                 tag = ooxml.tag_for("citet" if s["textual"] else "cite", ";".join(s["keys"]) + (f"|{s['locator']}" if s["locator"] else ""), self.controls)
-                ooxml.sdt_run(p, run, tag, f"Source {', '.join(s['keys'])}", self._next_id())
+                sdt = ooxml.sdt_run(p, run, tag, f"Source {', '.join(s['keys'])}", self._next_id())
+                if self.word_sources == "fields":
+                    # in the text ("Author [3]", "Author (2024)") the name stays text and the field holds the rest
+                    cut = shown.rfind(" [" if self.sources_style == "numbered" else " (") + 1 if s["textual"] else 0
+                    instr = wsources.instruction(s["keys"], self.word_tags, s["locator"], self.lcid, no_author=bool(cut))
+                    if instr:
+                        wsources.wrap_field(sdt, shown, instr, shown[:cut])
                 self.controls[tag] = {"type": "cite", "keys": s["keys"], "locator": s["locator"], "textual": s["textual"], "shown": shown}
             elif t == "ref":
                 p.add_run(self.targets.get(s["label"], s["label"]))
@@ -422,6 +431,10 @@ class Writer:
             for s in self._walk_spans(b):
                 if s["t"] == "cite":
                     self.order += [k for k in s["keys"] if k not in self.order]
+        if self.word_sources != "off" and self.order:
+            blob, self.word_tags = wsources.store_xml(self.doc, self.order, self.sources_style, self.lcid)
+            if self.word_tags:
+                wsources.write_store(self.d, blob)
         has_title_slot = any("{{title}}" in ooxml.plain(p) for p in self.body.iter(qn("w:p")))
         if not has_title_slot and self.styles.get("title") is not None:
             self.spans(self.para("title", None), [{"t": "text", "s": self.doc.title, "b": False, "i": False, "code": False, "href": None}])
@@ -502,7 +515,8 @@ class Writer:
                 "controls": self.controls, "styles": by_id, "groups": self.groups, "blocks": blocks,
                 "notes": {"mathematics_as_text": self.counts["math"], "figures_not_shown": self.counts["figures_missing"],
                           "template_was_dotx_or_dotm": self.info["was_template"], "macros_left_out": self.info["macros_dropped"],
-                          "styles_added": self.added_styles}}
+                          "styles_added": self.added_styles,
+                          "word_sources": {"mode": self.word_sources, "in_store": len(self.word_tags)}}}
 
 
 def check(doc: core.Document, template: dict, design: dict) -> list[str]:

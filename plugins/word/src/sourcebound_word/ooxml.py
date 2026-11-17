@@ -139,6 +139,20 @@ def set_sdt_text(sdt, text: str) -> None:
     """Replace what a control shows, keeping the formatting of its first run."""
     content = sdt.find(qn("w:sdtContent"))
     runs = content.findall(f".//{{{W}}}r")
+    kinds = [(r.find(qn("w:fldChar")).get(qn("w:fldCharType")) if r.find(qn("w:fldChar")) is not None else "") for r in runs]
+    if "separate" in kinds and "end" in kinds:      # a citation field: text before it stays text, the rest is its result
+        a, b = kinds.index("separate"), len(kinds) - 1 - kinds[::-1].index("end")
+        lead = [r for r in runs[:kinds.index("begin")] if r.find(qn("w:t")) is not None] if "begin" in kinds else []
+        result = [r for r in runs[a + 1:b] if r.find(qn("w:t")) is not None]
+        if result:
+            cut = max(text.rfind(" ["), text.rfind(" (")) + 1 if lead else 0
+            for group, value in ((lead, text[:cut]), (result, text[cut:])):
+                for n, r in enumerate(group):
+                    for t in r.findall(qn("w:t"))[1:]:
+                        r.remove(t)
+                    r.find(qn("w:t")).text = value if n == 0 else ""
+                    r.find(qn("w:t")).set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            return
     first = runs[0] if runs else OxmlElement("w:r")
     for r in runs[1:]:
         r.getparent().remove(r)
