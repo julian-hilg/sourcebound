@@ -945,6 +945,37 @@ def test_database_connections_are_described_tested_and_read_only(tmp_path, monke
         databases.remove("shop")
 
 
+def test_update_keeps_the_installed_extras_and_refuses_over_changes(tmp_path, monkeypatch, capsys):
+    import subprocess
+
+    from sourcebound import update
+    home = tmp_path / "checkout"
+    (home / "frontend" / "dist").mkdir(parents=True)
+    (home / "frontend" / "dist" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (home / "pyproject.toml").write_text('[project]\nname = "x"\n[project.optional-dependencies]\n'
+                                         'yaml = ["PyYAML>=6"]\nmissing = ["no-such-package-xyz"]\nboth = ["PyYAML", "no-such-package-xyz"]\n',
+                                         encoding="utf-8")
+    assert update.extras(home / "pyproject.toml")["both"] == ["PyYAML", "no-such-package-xyz"]
+    assert update.installed_extras(home / "pyproject.toml") == ["yaml"]          # all of its packages, or it does not count
+    steps = [what for what, _ in update.plan(home, ["yaml"])]
+    assert steps == ["pull the checkout", "install the packages (extras: yaml)", "install sb, playbooks and subagents",
+                     "build the web view", "check the installation"]
+    sync = dict(update.plan(home, ["yaml"]))["install the packages (extras: yaml)"]
+    assert sync[1:] == ["sync", "--project", str(home), "--extra", "yaml"]
+    assert "build the web view" not in dict(update.plan(home, [], frontend=False))
+    with pytest.raises(SystemExit, match="no extra nope"):
+        update.run(home, add=["nope"], dry_run=True)
+    git = lambda *a: subprocess.run(["git", "-C", str(home), "-c", "user.name=t", "-c", "user.email=t@example.org", *a],
+                                    check=True, capture_output=True)
+    git("init", "-q")
+    git("add", "pyproject.toml")
+    git("commit", "-q", "-m", "first")
+    assert update.run(home, add=[], dry_run=True) == 0 and "== pull the checkout" in capsys.readouterr().out
+    (home / "pyproject.toml").write_text((home / "pyproject.toml").read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="uncommitted changes"):
+        update.run(home, add=[], dry_run=True)
+
+
 def test_web_view_starts_once_per_port(monkeypatch, capsys):
     from sourcebound import ui
     first = ui.Server(("127.0.0.1", 0), ui.Handler)

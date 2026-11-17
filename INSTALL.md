@@ -176,11 +176,16 @@ needs.
 ## Updating
 
 ```sh
-cd sourcebound && git pull
-make install                       # or: uv sync && uv run sb install   (name your extras again)
-sb ui --build                      # only if you use the web view
-sb doctor
+sb update                          # git pull, uv sync with the extras you have, sb install, web view, sb doctor
+sb update --extra sql              # and add an extra
+sb update --dry-run                # the steps, without running them
 ```
+
+`sb update` keeps the extras that are installed (it names them to `uv sync` again), rebuilds
+the web view only if it was built before, and refuses to pull over uncommitted changes in the
+checkout. A running web view keeps the old code until it is started again. By hand, the same is
+`git pull`, `uv sync --extra ...` (every extra you use), `uv run sb install`, `sb ui --build`,
+`sb doctor`.
 
 Projects and the data root are not touched by an update.
 

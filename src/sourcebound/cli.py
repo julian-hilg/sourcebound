@@ -3,6 +3,7 @@
   sb init [--data-root PATH] [--projects-dir PATH]   where data and projects live (once per machine); asks in a terminal
   sb install [path|skill|agents]             `sb` on PATH, lead playbook and subagents for Claude Code
   sb install shortcut                        a desktop icon that starts the web view (`sb init` offers it)
+  sb update [--extra NAME] [--no-pull]       pull the checkout, reinstall with the extras you have, rebuild
   sb doctor                                  resolved configuration and access checks
   sb run [analysis|figures|bib|lineage|paper|check ...]   project build steps in order (default: all)
   sb run analysis/h1_x.py                    one analysis script (its results are merged)
@@ -399,6 +400,16 @@ def cmd_install(a):
             print("next: sb init --data-root PATH --projects-dir PATH (the user chooses both folders), then sb doctor")
         else:
             print(f"configuration: {config.user_config_path()} (kept); next: sb doctor")
+
+
+def cmd_update(a):
+    """The checkout, its packages (with the extras installed now), launcher and playbooks, the web view."""
+    from . import config, update
+    home = config.home()
+    if home is None:
+        sys.exit("sb update needs the Sourcebound checkout (an editable install: uv sync in the checkout)")
+    sys.exit(update.run(home, add=a.extra or [], pull=not a.no_pull,
+                        frontend=False if a.no_frontend else None, dry_run=a.dry_run))
 
 
 STEPS = ["analysis", "figures", "bib", "lineage", "paper", "check"]
@@ -1016,6 +1027,12 @@ def main(argv=None):
     s.set_defaults(f=cmd_doctor)
     s = sub.add_parser("install"); s.add_argument("what", nargs="?", default="all", choices=["all", "path", "skill", "agents", "hooks", "shortcut"])
     s.add_argument("--bin", help="folder on PATH for the `sb` launcher (default ~/.local/bin)"); s.set_defaults(f=cmd_install)
+    s = sub.add_parser("update", help="pull the checkout and reinstall, keeping the extras that are installed")
+    s.add_argument("--extra", action="append", help="also install this extra (word, linkedin, sql, browser); repeatable")
+    s.add_argument("--no-pull", action="store_true", help="reinstall only, without git pull")
+    s.add_argument("--no-frontend", action="store_true", help="do not rebuild the web view")
+    s.add_argument("--dry-run", action="store_true", help="print the steps without running them")
+    s.set_defaults(f=cmd_update)
     s = sub.add_parser("run"); s.add_argument("steps", nargs="*"); s.set_defaults(f=cmd_run)
     s = sub.add_parser("which"); s.add_argument("what", choices=sorted(WHICH)); s.set_defaults(f=cmd_which)
     s = sub.add_parser("new"); s.add_argument("slug"); s.add_argument("--title", required=True)
