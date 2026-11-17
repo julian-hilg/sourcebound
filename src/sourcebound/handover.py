@@ -95,7 +95,7 @@ def _float(kind: str, body: str) -> str:
         found[name] = args[0].strip()
         return ""
     body = _commands(body, "caption|label|tablenote|includegraphics|input", take)
-    body = re.sub(r"\\centering|\\small|\\footnotesize", "", body).strip()
+    body = _layout(body).strip()
     caption, label = re.sub(r"\s+", " ", found.get("caption", "")), found.get("label", "")
     anchor = f"{{#{label}}}" if label else ""
     src = found.get("input", "")
@@ -106,10 +106,43 @@ def _float(kind: str, body: str) -> str:
     elif src:
         block = f"{{{{table:{Path(src).stem}}}}}\n\n: {caption} {anchor}".rstrip()
     else:
-        block = f": {caption} {anchor}".rstrip()
-    if found.get("tablenote"):
-        block += f"\n\n*{found['tablenote']}*"
-    return "\n\n" + block + ("\n\n" + body if body else "") + "\n\n"
+        block = f": {caption} {anchor}".rstrip() if caption or anchor else ""
+    note = f"\n\n*{re.sub(r'\s+', ' ', _layout(found['tablenote'])).strip()}*" if found.get("tablenote") else ""
+    return "\n\n" + block + ("\n\n" + body if body else "") + note + "\n\n"
+
+
+# Commands that only set size, spacing or alignment: the text stays, the command goes.
+_DECLARATIONS = ("tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|raggedright|raggedleft|"
+                 "centering|arraybackslash|normalfont|rmfamily|sffamily|ttfamily|upshape|mdseries|selectfont")
+_SHAPES = {"bfseries": "**{}**", "itshape": "*{}*", "em": "*{}*", "slshape": "*{}*"}
+# Commands without arguments: a group after one of them is not its argument (\par{\small x}).
+_NO_ARGS = re.compile(r"par|smallskip|medskip|bigskip|noindent|newline|linebreak|indent|%s|%s"
+                      % (_DECLARATIONS, "|".join(_SHAPES)))
+
+
+def _layout(s: str) -> str:
+    """Drop layout commands: {\\small text} -> text, {\\bfseries text} -> **text**, \\vspace{3pt} -> nothing."""
+    rx = re.compile(r"\{\s*\\(%s|%s)(?![a-zA-Z])\s*" % (_DECLARATIONS, "|".join(_SHAPES)))
+    for _ in range(4):                              # nested groups
+        pos, out = 0, []
+        while (m := rx.search(s, pos)):
+            g = _group(s, m.start())
+            if g is None:
+                out.append(s[pos:m.end()])
+                pos = m.end()
+                continue
+            inner = g[0][m.end() - m.start() - 1:].strip()
+            before = re.search(r"(?:\\([a-zA-Z]+)\*?|[}\]])\s*$", s[:m.start()])
+            if before and not (before.group(1) and _NO_ARGS.fullmatch(before.group(1))):
+                inner = "{" + inner + "}"                 # an argument, \textbf{\large x}: keep its braces
+            elif m.group(1) in _SHAPES and inner:
+                inner = _SHAPES[m.group(1)].format(inner)
+            out.append(s[pos:m.start()] + inner)
+            pos = g[1]
+        s = "".join(out) + s[pos:]
+    s = _commands(s, "vspace|hspace|addvspace|vskip|hskip", lambda n, o, a: "")
+    s = re.sub(r"\\(?:%s|%s)(?![a-zA-Z])\s*" % (_DECLARATIONS, "|".join(_SHAPES)), "", s)
+    return re.sub(r"\\(?:smallskip|medskip|bigskip|noindent)(?![a-zA-Z])\s*", "", s)
 
 
 def _list(kind: str, body: str) -> str:
@@ -127,24 +160,69 @@ def _description(kind: str, body: str) -> str:
     return "\n\n" + "\n".join(out) + "\n\n"
 
 
+# Table environments and how many {arguments} come before the rows (tabularx: width and columns).
+_TABULARS = {"tabular": 1, "tabular*": 2, "tabularx": 2, "tabulary": 2, "longtable": 1, "xltabular": 2}
+
+
 def _tabulars(s: str, keep) -> str:
-    """A tabular written out in a section -> a pipe table (the first row is the header)."""
+    """A table written out in a section -> a pipe table (the first row is the header)."""
+    rx = re.compile(r"\\begin\{(%s)\}" % "|".join(re.escape(k) for k in _TABULARS))
     pos, out = 0, []
-    while (i := s.find("\\begin{tabular}", pos)) != -1:
-        spec = _group(s, i + len("\\begin{tabular}"))
-        end = s.find("\\end{tabular}", i)
-        if spec is None or end == -1:
-            break
-        body = re.sub(r"\\(?:toprule|midrule|bottomrule|hline)\b|\\cmidrule(?:\([^)]*\))?\{[^}]*\}", "", s[spec[1]:end])
+    while (m := rx.search(s, pos)):
+        env, i = m.group(1), m.end()
+        while (g := _group(s, i, "[", "]")):        # position, e.g. tabular[t]
+            i = g[1]
+        for _ in range(_TABULARS[env]):
+            g = _group(s, i)
+            if g is None:
+                break
+            i = g[1]
+        end = s.find("\\end{%s}" % env, i)
+        if g is None or end == -1:
+            out.append(s[pos:m.end()])
+            pos = m.end()
+            continue
+        body = re.sub(r"\\(?:toprule|midrule|bottomrule|hline|endhead|endfirsthead|endfoot|endlastfoot)(?![a-zA-Z])"
+                      r"|\\(?:cmidrule|cline)(?:\([^)]*\))?\{[^}]*\}", "", s[i:end])
+        # a line break inside a cell (\par, \newline) must not end the Markdown row
+        body = re.sub(r"\\(?:par|newline|linebreak)(?![a-zA-Z])", " ", _layout(body))
         rows = [[re.sub(r"\s+", " ", c).strip().replace("|", "\\|") for c in re.split(r"(?<!\\)&", r)]
-                for r in body.split("\\\\") if r.strip()]
+                for r in re.split(r"\\\\(?:\[[^\]]*\])?", body) if r.strip()]
         table = ""
         if rows:
             width = max(len(r) for r in rows)
             line = lambda r: "| " + " | ".join(r + [""] * (width - len(r))) + " |"
             table = "\n".join([line(rows[0]), keep("|" + " --- |" * width), *map(line, rows[1:])])
-        out.append(s[pos:i] + "\n\n" + table + "\n\n")
-        pos = end + len("\\end{tabular}")
+        out.append(s[pos:m.start()] + "\n\n" + table + "\n\n")
+        pos = end + len("\\end{%s}" % env)
+    return "".join(out) + s[pos:]
+
+
+_NOT_TEXT = re.compile(r"tikz|pgf|axis|scope|lstlisting|verbatim|minted|tabular|array|matrix|cases|split")
+
+
+def _boxes(s: str) -> str:
+    """A text environment of the deliverable's own (a note box, \\begin{hinweis}{Title} ... \\end{hinweis})
+    -> a quote block with the title in bold. Drawings and code stay as written (and are reported)."""
+    rx = re.compile(r"\\begin\{([a-zA-Z]+)\}")
+    pos, out = 0, []
+    while (m := rx.search(s, pos)):
+        name = m.group(1)
+        end = s.find("\\end{%s}" % name, m.end())
+        if _NOT_TEXT.search(name) or end == -1:
+            out.append(s[pos:m.end()])
+            pos = m.end()
+            continue
+        i, title = m.end(), ""
+        while (g := _group(s, i, "[", "]")):
+            i = g[1]
+        if (g := _group(s, i)):
+            title, i = g[0].strip(), g[1]
+        body = _boxes(s[i:end]).strip()
+        body = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", body)
+        lines = ([f"**{title}**", ""] if title else []) + body.splitlines()
+        out.append(s[pos:m.start()] + "\n\n" + "\n".join(("> " + ln).rstrip() for ln in lines) + "\n\n")
+        pos = end + len("\\end{%s}" % name)
     return "".join(out) + s[pos:]
 
 
@@ -186,11 +264,13 @@ def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tup
                     ("description", _description)):
         s = re.sub(r"(?s)\\begin\{(%s)\*?\}(?:\[[^\]]*\])?(.*?)\\end\{\1\*?\}" % env,
                    lambda m, fn=fn: fn(m.group(1), m.group(2)), s)
-    s = _tabulars(s, keep)
+    s = _layout(_tabulars(s, keep))
+    s = re.sub(r"(?s)\\begin\{(?:center|flushleft|flushright|minipage)\}(?:\[[^\]]*\])*(?:\{[^}]*\})?|\\end\{(?:center|flushleft|flushright|minipage)\}", "", s)
     s = re.sub(r"(?s)\\begin\{abstract\}(.*?)\\end\{abstract\}", lambda m: "# Abstract\n\n" + m.group(1).strip() + "\n", s)
     s = re.sub(r"(?s)\\begin\{(?:equation|align|gather)\*?\}(.*?)\\end\{(?:equation|align|gather)\*?\}",
                lambda m: "\n\n$$" + m.group(1).strip() + "$$\n\n", s)
     s = re.sub(r"(?s)\\\[(.*?)\\\]", lambda m: "\n\n$$" + m.group(1).strip() + "$$\n\n", s)
+    s = _boxes(s)
     s = _commands(s, "result", lambda n, o, a: "{{result:%s}}" % a[0].strip())
     s = s.replace("``", "\u201c")                   # an opening quote, not an empty code span
     s = _MATH.sub(lambda m: keep(m.group(0)), s)
@@ -207,14 +287,17 @@ def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tup
     wrap = {"emph": "*{}*", "textit": "*{}*", "textbf": "**{}**", "texttt": "`{}`", "url": "<{}>",
             "enquote": "\u201c{}\u201d", "footnote": "^[{}]", "paragraph": "**{}.**", "textsc": "{}", "mbox": "{}"}
     for _ in range(3):                              # nested markup
-        s = _commands(s, "|".join(wrap), lambda n, o, a: wrap[n].format(a[0].strip()))
+        s = _commands(s, "|".join(wrap), lambda n, o, a: wrap[n].format(
+            a[0].strip().rstrip(".") if n == "paragraph" else a[0].strip()))
     s = re.sub(r"\\label\{[^}]*\}", "", s)
-    for a, b in (("\\LaTeX", "LaTeX"), ("\\TeX", "TeX"), ("\\ldots", "\u2026"), ("\\dots", "\u2026"), ("\\,", "\u202f"), ("\\%", "%"), ("\\&", "&"), ("\\_", "_"), ("\\#", "#"), ("\\$", "$"),
+    for a, b in (("\\-", ""), ("\\texttimes", "×"), ("\\textendash", "–"), ("\\textemdash", "—"),
+                 ("\\LaTeX", "LaTeX"), ("\\TeX", "TeX"), ("\\ldots", "\u2026"), ("\\dots", "\u2026"), ("\\,", "\u202f"), ("\\%", "%"), ("\\&", "&"), ("\\_", "_"), ("\\#", "#"), ("\\$", "$"),
                  ("\\ ", " "), ("\\@", ""), ("~", "\u00a0"), ("---", "\u2014"), ("--", "\u2013"),
                  ("``", "\u201c"), ("''", "\u201d"), ("\\\\", "  \n"), ("\\par", "\n\n"),
                  ("\\noindent", ""), ("\\clearpage", ""), ("\\newpage", ""), ("\\medskip", ""),
                  ("\\smallskip", ""), ("\\bigskip", ""), ("\\centering", "")):
         s = s.replace(a, b)
+    s = re.sub(r"(?<![\\{])\{\}", "", s)              # \texttimes{}, \LaTeX{}: the empty group ends a command
     left = sorted(set(re.findall(r"\\[a-zA-Z]+", s)))
     s = re.sub(r"\0(\d+)\0", lambda m: held[int(m.group(1))], s)
     s = re.sub(r"[ \t]+\n", "\n", s)

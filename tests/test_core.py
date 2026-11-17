@@ -882,6 +882,42 @@ name: analyst  % not a comment
     assert "```\nname: analyst  % not a comment\n  -- kept as written\n```" in md
 
 
+def test_markdown_reads_tables_layout_and_boxes_without_latex():
+    from sourcebound.handover import macros, to_markdown
+    defs = macros(r"\newcommand\keyfig[2]{\textbf{\large #1}\par\smallskip{\footnotesize #2}}")
+    md, left = to_markdown(r"""\paragraph{Short answer.} Text.
+\begin{table}[h]
+\centering
+\caption{Who offers what: group \texttimes{} product}
+\label{tab:who}
+\small
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{4cm}*{2}{>{\centering\arraybackslash}X}@{}}
+\toprule
+Group & Stan\-dard & Free \\
+\midrule
+Banks & yes & -- \\
+\bottomrule
+\end{tabularx}
+\tablenote{{\raggedright\footnotesize Own assignment.}}
+\end{table}
+\begin{tabularx}{\linewidth}{XX}
+\keyfig{1.0\,\%}{cost cap} & \keyfig{\result{a.b}\,EUR}{grant} \\
+\end{tabularx}
+\begin{note}{For providers.}
+\vspace{3pt}Three ways:
+\begin{enumerate}
+\item One.
+\end{enumerate}
+\end{note}
+""", defs)
+    assert left == []
+    assert md.startswith("**Short answer.** Text.")
+    assert ": Who offers what: group × product {#tab:who}" in md
+    assert "| Group | Standard | Free |\n| --- | --- | --- |\n| Banks | yes | – |\n\n*Own assignment.*" in md
+    assert "| **1.0 %** cost cap | **{{result:a.b}} EUR** grant |" in md
+    assert "> **For providers.**\n>\n> Three ways:\n>\n> 1. One." in md
+
+
 def test_desktop_icon_starts_the_web_view(tmp_path):
     from sourcebound import shortcut
     assert shortcut.available()                                    # this checkout has the frontend
