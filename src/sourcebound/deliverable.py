@@ -125,13 +125,17 @@ def diagrams(project: config.Project | None = None) -> dict[str, str]:
             report[src.stem] = "kept the older PDF (LaTeX is not installed)" if pdf.exists() else "no PDF: LaTeX is not installed"
         else:
             with tempfile.TemporaryDirectory() as tmp:
-                extra = "\\usepackage{sbresults}\n\\sbresults{%s}\n" % res.as_posix() if res.exists() else ""
-                (Path(tmp) / "diagram.tex").write_text(STANDALONE % (extra, src.as_posix()), encoding="utf-8")
-                env = {**os.environ, "TEXINPUTS": f"{latex or ''}{os.pathsep}{src.parent}{os.pathsep}"}
-                r = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "diagram.tex"],
+                # files by name, found through TEXINPUTS: no absolute path inside a .tex file, so a TeX
+                # that sees the disk under other names (TeX Live in WSL, a container) reads them too
+                extra = "\\usepackage{sbresults}\n\\sbresults{%s}\n" % res.name if res.exists() else ""
+                main = Path(tmp) / "sb-standalone-diagram.tex"
+                main.write_text(STANDALONE % (extra, src.name), encoding="utf-8")
+                search = [str(x) for x in (latex, src.parent, res.parent if res.exists() else None) if x]
+                env = {**os.environ, "TEXINPUTS": os.pathsep.join(search) + os.pathsep}
+                r = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error", main.name],
                                    cwd=tmp, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                if r.returncode == 0 and (Path(tmp) / "diagram.pdf").exists():
-                    shutil.copy2(Path(tmp) / "diagram.pdf", pdf)
+                if r.returncode == 0 and main.with_suffix(".pdf").exists():
+                    shutil.copy2(main.with_suffix(".pdf"), pdf)
                     report[src.stem] = "built"
                 else:
                     err = next((ln for ln in r.stdout.splitlines() if ln.startswith("!")), "pdflatex failed")
