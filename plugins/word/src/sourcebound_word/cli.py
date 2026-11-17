@@ -7,13 +7,14 @@ from pathlib import Path
 
 
 def setup(parser) -> None:
-    parser.add_argument("what", choices=["status", "refresh", "pull", "inspect", "adopt"])
+    parser.add_argument("what", choices=["status", "refresh", "pull", "inspect", "adopt", "pdf"])
+    parser.add_argument("--engine", choices=["word", "libreoffice"], help="pdf: which program converts (default: the first available)")
     parser.add_argument("file", help="the Word file (.docx; for inspect and adopt also .dotx or .dotm)")
     parser.add_argument("--project", help="the project folder, if the file is not inside it")
     parser.add_argument("--id", help="adopt: the id of the new template")
     parser.add_argument("--design", help="adopt: the design the template belongs to")
     parser.add_argument("--title", help="adopt: a title for listings")
-    parser.add_argument("--out", help="pull: where to write the Markdown (default: next to the source)")
+    parser.add_argument("--out", help="pull: where to write the Markdown (default: next to the source); pdf: the PDF file")
     parser.add_argument("--sources", action="store_true", help="refresh: regenerate a source list that was edited by hand")
     parser.add_argument("--json", action="store_true", help="print the report as data")
 
@@ -30,6 +31,15 @@ def _lines(title: str, rows: list[str], limit: int = 12) -> None:
 def run(a) -> None:
     from . import roundtrip, template
     try:
+        if a.what == "pdf":
+            from . import pdf
+            rep = pdf.to_pdf(Path(a.file), a.out, engine=a.engine)
+            if a.json:
+                return print(json.dumps(rep, indent=2, ensure_ascii=False))
+            print(f"wrote {rep['pdf']} ({rep['engine']}, {rep['seconds']} s)")
+            for n in rep["notes"]:
+                print("note:", n)
+            return
         if a.what == "inspect":
             rep = template.inspect(Path(a.file).expanduser())
             if a.json:

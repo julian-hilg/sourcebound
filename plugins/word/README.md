@@ -176,6 +176,26 @@ they were written. Edited blocks are converted from the file, with controls turn
 `{{result:key}}` and `[@key]`. The source text itself is never written: compare, then take over
 what you want. For a piece the command prints a diff against `text.md`.
 
+## PDF
+
+```sh
+sb word pdf report.docx                 # report.pdf next to it
+sb word pdf report.docx --engine libreoffice --out out/report.pdf
+```
+
+On Windows, Microsoft Word converts (hidden; tables of contents and other fields are refreshed
+first, which Word does not do by itself when a program drives it). Elsewhere, or with
+`--engine libreoffice`, LibreOffice converts; its line breaks can differ from Word's. A Word that
+does not answer within three minutes is stopped; an instance the person has open is never
+touched.
+
+Fonts installed only as OpenType with PostScript outlines (`.otf`) cannot be embedded by Word: it
+draws their text as shapes. The PDF looks right, but that text cannot be searched, selected or
+read aloud. The command names such fonts. Installing a TrueType (`.ttf`) version of the font, where
+the licence allows it, gives searchable text.
+
+The plugin also registers this as the `.docx -> .pdf` converter that `sb deliver --pdf` uses.
+
 ## Limits
 
 - **Tested with Word for Mac only, and only through scripting.** Files rendered here were

@@ -16,6 +16,7 @@ and a function `register(api)` that says what it brings:
         api.command("word", setup_parser, run)           # adds `sb word ...`
         api.check("docx", check)                         # optional: checks before rendering
         api.pack(Path(__file__).parent / "pack")         # optional: designs/ and templates/ it brings
+        api.converter(".docx", ".pdf", to_pdf)           # optional: a format conversion for `sb deliver`
 
 A renderer turns one `Document` (see `render.py`) into files, using a registered template
 and a design.  Plugins never reach around the core: they read a project through
@@ -41,6 +42,15 @@ class Renderer:
 
 
 @dataclass
+class Converter:
+    source: str                     # file suffix it reads, e.g. ".docx"
+    target: str                     # file suffix it writes, e.g. ".pdf"
+    fn: Callable                    # convert(path, out) -> Path, or (Path, notes)
+    title: str = ""
+    plugin: str = ""
+
+
+@dataclass
 class Plugin:
     name: str
     version: str = ""
@@ -49,6 +59,7 @@ class Plugin:
     renderers: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     packs: list[str] = field(default_factory=list)
+    converters: list[str] = field(default_factory=list)
 
 
 class Api:
@@ -85,6 +96,14 @@ class Api:
         """`fn(folder, design) -> None`: writes a starting template of this kind into a new folder."""
         self._registry.scaffolds[kind] = fn
 
+    def converter(self, source: str, target: str, fn: Callable, *, title: str = "") -> None:
+        """`fn(path, out) -> Path` or `(Path, notes)`: one file turned into another format (e.g. .docx -> .pdf).
+
+        `sb deliver` uses converters to add formats to what was rendered."""
+        key = (source.lower(), target.lower())
+        self._registry.converters[key] = Converter(key[0], key[1], fn, title, self._plugin.name)
+        self._plugin.converters.append(f"{key[0]} -> {key[1]}")
+
 
 @dataclass
 class Registry:
@@ -94,6 +113,7 @@ class Registry:
     checks: dict[str, list[Callable]] = field(default_factory=dict)
     scaffolds: dict[str, Callable] = field(default_factory=dict)
     packs: list = field(default_factory=list)
+    converters: dict[tuple, Converter] = field(default_factory=dict)
 
 
 _REGISTRY: Registry | None = None
@@ -121,4 +141,5 @@ def load(*, fresh: bool = False) -> Registry:
 
 def listing() -> list[dict]:
     return [{"name": p.name, "package": p.package, "version": p.version, "error": p.error,
-             "renderers": p.renderers, "commands": p.commands, "packs": p.packs} for p in load().plugins]
+             "renderers": p.renderers, "commands": p.commands, "packs": p.packs, "converters": p.converters}
+            for p in load().plugins]

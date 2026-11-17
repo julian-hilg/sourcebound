@@ -5,6 +5,7 @@
     sb word adopt FILE --id ID [--design ID]         register a corporate .docx/.dotx/.dotm as a template
     sb render TARGET --template ID                   a piece or a deliverable as a Word file
     sb word status | refresh | pull FILE             after a person edited the file
+    sb word pdf FILE                                 the file as PDF (Word on Windows, else LibreOffice)
 
 See README.md of this package for the walkthrough and the limits.
 """
@@ -14,7 +15,8 @@ __version__ = "0.1.0"
 
 
 def register(api) -> None:
-    from . import cli, render, template
+    from . import cli, pdf, render, template
+    api.converter(".docx", ".pdf", pdf.convert, title="PDF through Word (Windows) or LibreOffice")
     api.renderer("docx", render.render, title="Word document from a .docx template, numbers and citations as content controls",
                  outputs=(".docx",))
     api.check("docx", render.check)
