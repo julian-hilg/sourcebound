@@ -8,7 +8,7 @@ when you need it.
 | **Core** | the `sb` command, the agents and playbooks for Claude Code, studies and desks, the data lake, LaTeX deliverables, the format-neutral handover | [uv](https://docs.astral.sh/uv/), git |
 | **Word** (optional) | Word documents from `.docx`, `.dotx` and `.dotm` templates, with a round trip for files edited in Word | `uv sync --extra word` |
 | **Slides and posts** (optional) | slides, infographics and post text from HTML templates, with a layout check | `uv sync --extra linkedin`, and Chrome, Edge or Chromium for PNG and PDF |
-| **Web view** (optional) | a local frontend over all projects, the data lake and what is installed | Node.js 22 or newer |
+| **Web view** (optional) | a local frontend over all projects, the data lake and what is installed | Node.js 22 or newer (on Windows also inside WSL) |
 
 ## Requirements
 
@@ -90,6 +90,10 @@ sb plugin list                            # must list them
 sb ui --build                             # the web view: builds once, then serves http://127.0.0.1:5210
 sb install hooks                          # lets the web view show what agents are doing
 ```
+
+On Windows without Node.js on the `PATH`, `sb ui --build` and the agent bridge use the Node.js
+inside WSL; the checkout must then be on a drive WSL can reach. A desktop icon that runs
+`sb ui`: `sb install shortcut` (or answer yes in `sb init`).
 
 `uv sync` installs exactly the extras you name and removes the others, so name all you use
 (`--extra sql` for database sources, `--extra browser` for pages that need a browser).
