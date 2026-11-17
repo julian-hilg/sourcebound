@@ -42,6 +42,11 @@ sb source W-0008 --out /tmp/w0008.txt           # the whole text in a file, for 
 sb source set W-0008 --publisher "..."          # correct the title or publisher afterwards
 ```
 
+Both commands record when the source was published: `--date YYYY-MM-DD`, or else the date the
+file itself declares (a page's publication metadata, a PDF's creation date) or a date written in
+the title. A source without one is cited as "n.d."; `sb source dates [--write]` reads the dates
+of sources registered earlier, and `sb source set W-0008 --date ...` corrects one.
+
 `sb doc` is how a folder of existing reports becomes material for a piece: each file used is
 archived unchanged (by its hash) and gets an id to cite. The same file registered again keeps
 its id (`already registered as W-0008`); `--new` forces a second entry. PDF needs `pdftotext`

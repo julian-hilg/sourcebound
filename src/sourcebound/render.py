@@ -271,6 +271,8 @@ def from_deliverable(p: config.Project, name: str) -> Document:
     refs, web = _evidence(p)
     if (out / "references.bib").exists():
         refs.update(bib_fields((out / "references.bib").read_text(encoding="utf-8")))
+    for key in web:                                 # a web source is described by the ledger, not by the copy of it in
+        refs.pop(key, None)                         # the bibliography, which is older (no date until the next `sb bib sync`)
     return Document(project=p, name=name, kind="deliverable", title=entry.get("title") or p.title, lang=p.lang,
                     folder=p.root / "deliverables" / name,
                     sections=[Section(Path(s["file"]).stem, (out / s["file"]).read_text(encoding="utf-8"), s["appendix"], s["source"])

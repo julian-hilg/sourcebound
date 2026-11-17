@@ -651,12 +651,57 @@ def cmd_snap(a):
         sys.exit(f"not archived: {e}\n(do not work around this; cite another source or ask the user)")
     entry = {"title": a.title, "url": a.url, "publisher": a.publisher or "",
              "accessed": ref.fetched_at, "sha256": ref.sha256, "raw": ref.path, "note": a.note or ""}
+    dated = _published(a.date, ref.sha256, ref.path, a.title)
+    if dated:
+        entry["date"] = dated[0]
     sid, created = ledger.register_source(entry, new=a.new)
     if not created:
         print(already_registered(sid, ref.sha256))
         return
     print(f"{sid}  {ledger.source_label(entry)}\n      {a.url}, archived raw/{ref.path}  "
-          f"(cite as \\cite{{{sid}}}, ref: {sid} in claims.yaml)")
+          f"(cite as \\cite{{{sid}}}, ref: {sid} in claims.yaml)\n      " + _dated_line(dated, sid))
+
+
+def _published(given: str | None, sha256: str, name: str, title: str) -> tuple[str, str] | None:
+    """(date, where from) of a source: what the person gave, else what the archived copy or its title says."""
+    from . import srcdate
+    from .fetch import read_raw
+    if given:
+        d = srcdate.normal(given)
+        if d is None:
+            sys.exit(f"--date {given}: not a date (YYYY-MM-DD, YYYY-MM or YYYY)")
+        return d, "given"
+    try:
+        data = read_raw("web", sha256)
+    except (FileNotFoundError, OSError):
+        data = None
+    return srcdate.find(data, name=name.removesuffix(".zst"), title=title)
+
+
+def _dated_line(dated: tuple[str, str] | None, sid: str) -> str:
+    if dated is None:
+        return f"published: not found in the file (citations will say n.d.); set it with `sb source set {sid} --date YYYY-MM-DD`"
+    return f"published {dated[0]}" + ("" if dated[1] == "given" else f" (from {dated[1]}; correct it with `sb source set {sid} --date ...`)")
+
+
+def _source_dates(write: bool) -> None:
+    """`sb source dates`: the publication date of every source that has none, read from its archived copy."""
+    from . import ledger
+    rows = [s for s in ledger.load()["sources"] if not s.get("date") and s.get("sha256")]
+    found = 0
+    for s in rows:
+        dated = _published(None, s["sha256"], s.get("file") or s.get("raw") or "", s.get("title") or "")
+        if dated:
+            found += 1
+            if write:
+                ledger.update_source(s["id"], {"date": dated[0]})
+        print(f"{s['id']}  {dated[0] if dated else '-':<10}  {('from ' + dated[1]) if dated else 'nothing in the file or the title':<32}  {str(s.get('title') or '')[:70]}")
+    if not rows:
+        print("every source has a date")
+        return
+    print(f"\n{found} of {len(rows)} sources without a date " + ("now have one" if write else "can be dated: `sb source dates --write` records them")
+          + (f"; {len(rows) - found} stay undated (n.d.) until `sb source set W-xxxx --date ...`" if found < len(rows) else "")
+          + ("\nrenders made before still show the old dates; render again" if write and found else ""))
 
 
 def already_registered(sid: str, sha256: str) -> str:
@@ -713,6 +758,9 @@ def cmd_source(a):
     from . import ledger
     from .fetch import read_raw
     fields = {k: getattr(a, k) for k in ledger.SOURCE_FIELDS if getattr(a, k, None) is not None}
+    if a.id == "dates":
+        _source_dates(a.write)
+        return
     if a.id == "set":
         if not a.sid or not fields:
             sys.exit('usage: sb source set W-xxxx [--title "..."] [--publisher "..."] [--author "..."] [--date YYYY-MM-DD]')
@@ -1145,15 +1193,17 @@ def main(argv=None):
     s.set_defaults(f=cmd_freeze)
     s = sub.add_parser("snap"); s.add_argument("url"); s.add_argument("--title", required=True)
     s.add_argument("--publisher"); s.add_argument("--note")
+    s.add_argument("--date", help="when the page was published (YYYY-MM-DD); read from the page when left out")
     s.add_argument("--new", action="store_true", help="register again even if the same bytes are already a source")
     s.set_defaults(f=cmd_snap)
     s = sub.add_parser("unblock"); s.add_argument("source"); s.add_argument("host", nargs="?")
     s.set_defaults(f=cmd_unblock)
     s = sub.add_parser("source", help="read an archived source or paper; `sb source set W-xxxx --title ...` corrects its name")
-    s.add_argument("id", help="W-xxxx, a citation key, or `set`"); s.add_argument("sid", nargs="?", help="with `set`: the W-xxxx to change")
+    s.add_argument("id", help="W-xxxx, a citation key, `set`, or `dates` (publication dates read from the archived copies)"); s.add_argument("sid", nargs="?", help="with `set`: the W-xxxx to change")
     s.add_argument("--grep", help="passages around each hit (overlapping ones merged), numbered, with a count")
     s.add_argument("--chars", type=int, default=4000, help="characters to print (default 4000; 0 for all)")
     s.add_argument("--page", type=int); s.add_argument("--out", help="write the whole text to this file")
+    s.add_argument("--write", action="store_true", help="with `dates`: record the dates that were found")
     for opt in ("title", "publisher", "author", "date"):
         s.add_argument(f"--{opt}", help="with `set`: the new value")
     s.set_defaults(f=cmd_source)

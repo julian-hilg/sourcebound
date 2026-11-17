@@ -1796,3 +1796,36 @@ def test_desk_status_piece_ids_and_the_one_channel(desk, capsys):
     assert "topic:   Fonds und ETFs in Deutschland\nchannels: linkedin\nsources: 0 registered" in out
     assert "pieces:  2 (idea 1, review 1)" in out and "results: 0 recorded" in out
     assert "pre-registration" not in out and "claims:" not in out
+
+
+def test_a_sources_date_is_read_from_the_file_or_its_title():
+    from sourcebound import srcdate
+    page = b'<html><head><meta property="article:published_time" content="2026-10-02T07:00:00+02:00"><meta name="date" content="2020-01-01"></head></html>'
+    assert srcdate.find(page, title="A press release") == ("2026-10-02", "the page's own date")
+    assert srcdate.find(b'<html><script type="application/ld+json">{"datePublished": "2025-12-05"}</script></html>') == ("2025-12-05", "the page's own date")
+    assert srcdate.find(b"<html><time datetime='2026-01-01'>today</time></html>") is None          # any <time> is not a publication date
+    assert srcdate.find(b"<html></html>", title="Monetary policy assessment of 24 September 2026") == ("2026-09-24", "the date in its title")
+    assert srcdate.find(None, title="Pressemitteilung vom 2. Oktober 2026") == ("2026-10-02", "the date in its title")
+    assert srcdate.find(None, title="Code (December 2024 version)") == ("2024-12", "the date in its title")
+    assert srcdate.find(None, title="Trading calendar 2026") is None                               # a year alone names a subject
+    # a file put online years after the document it holds: the title's year wins
+    assert srcdate.find(b'<html><meta name="dcterms.created" content="2024-11-12"></html>', title="Column 2022-01") == ("2022-01", "the date in its title")
+    assert [srcdate.normal(x) for x in ("02.10.2026", "October 2, 2026", "20261002", "2026", "soon", "2026-13-01")] == \
+        ["2026-10-02", "2026-10-02", "2026-10-02", "2026", None, None]
+
+
+def test_a_new_source_gets_the_date_its_file_declares(desk, tmp_path, capsys):
+    from sourcebound import ledger
+    from sourcebound.cli import main
+    (tmp_path / "dated.html").write_text('<html><head><meta property="article:published_time" content="2026-10-02T07:00:00Z"></head><body>x</body></html>', encoding="utf-8")
+    (tmp_path / "undated.html").write_text("<html><body>nothing here</body></html>", encoding="utf-8")
+    main(["doc", str(tmp_path / "dated.html"), "--title", "A release"])
+    main(["doc", str(tmp_path / "undated.html"), "--title", "A page"])
+    by_title = {s["title"]: s for s in ledger.load()["sources"]}
+    assert by_title["A release"]["date"] == "2026-10-02" and "date" not in by_title["A page"]
+    capsys.readouterr()
+    main(["source", "dates", "--write"])
+    assert "0 of 1 sources without a date" in capsys.readouterr().out
+    main(["source", "set", by_title["A page"]["id"], "--date", "2026-11-01"])
+    main(["source", "dates"])
+    assert "every source has a date" in capsys.readouterr().out

@@ -186,7 +186,11 @@ def cmd_doc(a):
     entry = {"title": a.title or f.stem, "url": f"file:{f.name}", "publisher": a.publisher or "",
              "accessed": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sha256": ref.sha256,
              "raw": ref.path, "file": f.name, "kind": "document", "note": a.note or "",
-             **({"date": a.date} if a.date else {}), **({"author": a.author} if a.author else {})}
+             **({"author": a.author} if a.author else {})}
+    from .cli import _published
+    dated = _published(a.date, ref.sha256, f.name, a.title or "")
+    if dated:
+        entry["date"] = dated[0]
     sid, created = ledger.register_source(entry, new=a.new)
     if not created:
         from .cli import already_registered
