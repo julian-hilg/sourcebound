@@ -518,8 +518,50 @@ export interface DataSource {
   checked: string;
   needs_env: EnvNeed[];
   database: boolean;
+  /** The database connection, when the entry describes one field by field (never a password). */
+  connection: DatabaseConnection | null;
   last_request: { ts: string; status: number | string } | null;
   stopped_hosts: string[];
+}
+
+export type DatabaseDriver = "mssql" | "postgresql" | "mysql" | "sqlite" | "duckdb";
+/** The `database:` block of a register entry, as `databases.check` writes it. */
+export interface DatabaseSpec {
+  driver: DatabaseDriver;
+  server?: string;
+  port?: number;
+  database?: string;
+  auth?: "sql" | "windows" | "none";
+  user?: string;
+  password_env?: string;
+  encrypt?: boolean;
+  trust_server_certificate?: boolean;
+  ssl_mode?: "disable" | "prefer" | "require" | "verify-full";
+  timeout?: number;
+  path?: string;
+}
+export interface ConnectionTest {
+  status: "ok" | "failed";
+  message: string;
+  at: string;
+}
+export interface DatabaseConnection {
+  spec: DatabaseSpec;
+  /** Fields the entry gets wrong (an entry edited by hand), one message each. */
+  problems: Record<string, string> | null;
+  where: string;
+  needs_password: boolean;
+  /** A password was typed in this session; it lives only in the memory of `sb ui`. */
+  password_in_session: boolean;
+  ready: boolean;
+  why: string;
+  last_test: ConnectionTest | null;
+}
+/** What saving a connection answers: `before` is the entry's earlier text (null when it was created). */
+export interface ConnectionSaved {
+  path: string;
+  created?: boolean;
+  before: string | null;
 }
 
 export interface McpServer {
@@ -535,7 +577,7 @@ export interface McpServer {
 
 export interface Connections {
   sources: DataSource[];
-  sql_targets: { id: string; title: string; ready: boolean; hint: string }[];
+  sql_targets: { id: string; title: string; ready: boolean; hint: string; tested?: "ok" | "failed" | null }[];
   mcp_servers: McpServer[];
   seconds_between_requests: number;
 }

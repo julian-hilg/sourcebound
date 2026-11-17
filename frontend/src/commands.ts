@@ -1,6 +1,7 @@
 import type { Command, Werkbank } from "@werkbank/framework";
 import { z } from "zod";
-import { api, paths, type JobRun, type Note, type Piece, type PieceCheck, type QueryResult, type RunResult } from "./data/api";
+import { api, paths, type ConnectionSaved, type ConnectionTest, type DatabaseSpec, type JobRun, type Note, type Piece, type PieceCheck, type QueryResult, type RunResult } from "./data/api";
+import { databaseSpec } from "./data/databases";
 import { prefs } from "./prefs";
 import { readCheck, runs } from "./data/runs";
 
@@ -134,6 +135,70 @@ export const commands: Command<Werkbank, any>[] = [
     },
     undo: (_ctx, i: { project: string }, removed) =>
       void api.post(paths.notes(i.project), { op: "put", note: removed }).then(() => api.refresh(paths.project(i.project))),
+  },
+  // ---- data: database connections (what `sb datasource add|set|test|rm` do). No command carries a
+  // password: its input is recorded in the history. The panel hands a password to the service directly.
+  {
+    id: "connection.save",
+    title: "Create or change a database connection",
+    category: "Data",
+    risk: "local",
+    palette: false,
+    input: z.object({
+      id: z.string().regex(/^[a-z][a-z0-9_]*$/).describe("Source id: lowercase letters, digits and _"),
+      name: z.string().min(1).max(120).describe("What the person calls it").optional(),
+      spec: databaseSpec,
+    }),
+    run: async (_ctx, i: { id: string; name?: string; spec: DatabaseSpec }) => {
+      const saved = await api.post<ConnectionSaved>(paths.connections, { op: "save", ...i });
+      void api.refresh(paths.connections);
+      return saved;
+    },
+    undo: (_ctx, i: { id: string }, saved) => {
+      const s = saved as ConnectionSaved;
+      void api.post(paths.connections, s.before === null ? { op: "remove", id: i.id } : { op: "restore", id: i.id, text: s.before }).then(() => api.refresh(paths.connections));
+    },
+  },
+  {
+    id: "connection.remove",
+    title: "Remove a database connection",
+    category: "Data",
+    risk: "local",
+    palette: false,
+    input: z.object({ id: z.string().describe("Source id of a database connection nothing was read from yet") }),
+    run: async (_ctx, i: { id: string }) => {
+      const removed = await api.post<ConnectionSaved>(paths.connections, { op: "remove", id: i.id });
+      void api.refresh(paths.connections);
+      return removed;
+    },
+    undo: (_ctx, i: { id: string }, removed) =>
+      void api.post(paths.connections, { op: "restore", id: i.id, text: (removed as ConnectionSaved).before }).then(() => api.refresh(paths.connections)),
+  },
+  {
+    id: "connection.test",
+    title: "Test a database connection",
+    category: "Data",
+    // Connects and asks for the server's version; like sql.query it only reads.
+    risk: "read",
+    input: z.object({ id: z.string().describe("Source id of a database connection") }),
+    run: async (_ctx, i: { id: string }) => {
+      const result = await api.post<ConnectionTest>(paths.connections, { op: "test", id: i.id });
+      void api.refresh(paths.connections);
+      return { id: i.id, ...result };
+    },
+  },
+  {
+    id: "connection.forget",
+    title: "Forget the password typed for a connection",
+    category: "Data",
+    risk: "read",
+    palette: false,
+    input: z.object({ id: z.string() }),
+    run: async (_ctx, i: { id: string }) => {
+      const answer = await api.post(paths.connections, { op: "forget", id: i.id });
+      void api.refresh(paths.connections);
+      return answer;
+    },
   },
   // ---- data: one reading statement against the lake or a registered database
   {

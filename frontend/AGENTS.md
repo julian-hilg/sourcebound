@@ -62,9 +62,13 @@ into link group 1; open a panel that should follow the selection with `openLinke
 - **The person's decisions are not in the app's hands.** No command approves a brief, freezes hypotheses,
   unblocks a host or publishes; `piece.decide` records a decision, it does not post. Nothing here posts anywhere:
   keep saying so on screen where publishing is mentioned.
-- **Registering is command-line work.** Sources, database connections, MCP servers, designs, templates, packs
-  and jobs are files with terms and documentation; the app shows them and the command to add one
-  (`CommandLine` from the kit). Do not build forms for them.
+- **Registering is command-line work, except database connections.** Sources, MCP servers, designs, templates,
+  packs and jobs are files with terms and documentation; the app shows them and the command to add one
+  (`CommandLine` from the kit). Do not build forms for them. Database connections are the exception (the
+  owner's decision, 2026-11-17): the Connections panel creates, changes, tests and removes them as the
+  Werkbank starter does, through `connection.save|remove|test|forget`, which write the same register entry as
+  `sb datasource add|set|rm`. A password is typed by the person, goes to the service directly (never through a
+  command, whose input the history records) and lives only in the memory of `sb ui`.
 - **Every setting does something.** A new `SettingSpec` in `settings.ts` is read by a panel (`useSetting`), a
   command, or through `prefs`. No dead switches. Settings belong to the person and the browser, never to a project.
 - **Every panel returns the data behind its view from `describe`,** bounded by the person's caps
