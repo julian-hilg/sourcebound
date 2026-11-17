@@ -50,7 +50,7 @@ def plan(home: Path, wanted: list[str], *, pull: bool = True, frontend: bool | N
     steps: list[tuple[str, list[str]]] = []
     if pull:
         steps.append(("pull the checkout", ["git", "-C", str(home), "pull", "--ff-only"]))
-    sync = [uv, "sync", "--project", str(home)]
+    sync = [uv, "sync"]                                # run in the checkout (cwd), see `run`
     for e in wanted:
         sync += ["--extra", e]
     steps.append(("install the packages" + (f" (extras: {', '.join(wanted)})" if wanted else ""), sync))
@@ -70,6 +70,10 @@ def dirty(home: Path) -> list[str]:
 
 
 def run(home: Path, *, add: list[str], pull: bool = True, frontend: bool | None = None, dry_run: bool = False) -> int:
+    from .ui import _drive_path
+    # a checkout on a network share as its mapped drive (Z:\...), not \\server\share\...: uv writes the
+    # paths of the plugins into uv.lock relative to the project only when it sees the project that way
+    home = Path(_drive_path(home))
     known = extras(home / "pyproject.toml")
     unknown = [e for e in add if e not in known]
     if unknown:
@@ -87,6 +91,8 @@ def run(home: Path, *, add: list[str], pull: bool = True, frontend: bool | None 
         if dry_run:
             continue
         r = subprocess.run(cmd, cwd=home)
+        if r.returncode == 0 and cmd[1:2] == ["sync"] and pull and dirty(home):
+            print("note: uv sync changed uv.lock in the checkout; check `git diff uv.lock` before committing", flush=True)
         if r.returncode:
             print(f"sb update: stopped: `{what}` failed (exit {r.returncode}); the steps after it did not run", flush=True)
             return r.returncode

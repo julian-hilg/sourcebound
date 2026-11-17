@@ -961,7 +961,7 @@ def test_update_keeps_the_installed_extras_and_refuses_over_changes(tmp_path, mo
     assert steps == ["pull the checkout", "install the packages (extras: yaml)", "install sb, playbooks and subagents",
                      "build the web view", "check the installation"]
     sync = dict(update.plan(home, ["yaml"]))["install the packages (extras: yaml)"]
-    assert sync[1:] == ["sync", "--project", str(home), "--extra", "yaml"]
+    assert sync[1:] == ["sync", "--extra", "yaml"]                               # run inside the checkout
     assert "build the web view" not in dict(update.plan(home, [], frontend=False))
     with pytest.raises(SystemExit, match="no extra nope"):
         update.run(home, add=["nope"], dry_run=True)

@@ -705,6 +705,13 @@ def _in_wsl(cmd: list[str]) -> bool:
     return Path(cmd[0]).name.lower() == "wsl.exe"
 
 
+def _cwd(cmd: list[str], folder: Path) -> Path:
+    """Where to start a tool: the folder itself, or for WSL a neutral one (it enters the folder from its
+    argument, and complains about a working folder on a network share it cannot translate)."""
+    import os
+    return Path(os.environ.get("SystemRoot", "C:\\Windows")) if _in_wsl(cmd) else folder
+
+
 def _bridge() -> subprocess.Popen | None:
     """The Werkbank agent bridge, if the frontend's packages are installed (agents drive the app through it)."""
     home = config.home()
@@ -717,11 +724,11 @@ def _bridge() -> subprocess.Popen | None:
     if _in_wsl(node):
         # node_modules may live on the Linux side only (invisible from Windows): ask WSL whether it is there
         probe = node[:4] + [f'cd "$(wslpath -u "$1")" && test -f {BRIDGE_SCRIPT}', "bash", node[-1]]
-        if subprocess.run(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        if subprocess.run(probe, cwd=_cwd(probe, front), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
             return None
     elif not (front / BRIDGE_SCRIPT).exists():
         return None
-    return subprocess.Popen(node + [BRIDGE_SCRIPT, "--hub"], cwd=None if _in_wsl(node) else front,
+    return subprocess.Popen(node + [BRIDGE_SCRIPT, "--hub"], cwd=_cwd(node, front),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -738,7 +745,7 @@ def build_frontend() -> None:
         print("npm is not on the PATH; using the one in WSL", flush=True)
     installed = (front / "node_modules").exists() and any((front / "node_modules").iterdir())
     for step in (None if installed else ["install"], ["run", "build"]):
-        if step and subprocess.run(npm + step, cwd=None if _in_wsl(npm) else front).returncode:
+        if step and subprocess.run(npm + step, cwd=_cwd(npm, front)).returncode:
             raise RuntimeError(f"`npm {' '.join(step)}` failed in {front}")
 
 
