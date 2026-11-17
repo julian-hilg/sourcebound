@@ -1,8 +1,8 @@
-import { defineTool, useSetting, useToolState } from "@werkbank/framework";
+import { defineTool, useSetting } from "@werkbank/framework";
 import { prefs } from "../prefs";
 import { z } from "zod";
 import { api, paths, useApi, type ActivityEvent } from "../data/api";
-import { Blank, ago, projectOf, useProject, when } from "./lib";
+import { ago, Blank, projectOf, usePanelState, useProject, when } from "./lib";
 
 const stateSchema = z.object({ scope: z.enum(["all", "project"]) });
 type State = z.infer<typeof stateSchema>;
@@ -37,7 +37,7 @@ const what = (e: ActivityEvent) =>
 
 function ActivityPanel() {
   const { id } = useProject();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   // Reloaded every few seconds while the panel is visible (Settings → Reloading).
   const activity = useApi<Activity>(paths.activity, prefs.every.activity);
   const [hide] = useSetting<string>("activity.hideTools");

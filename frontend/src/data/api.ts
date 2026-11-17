@@ -681,6 +681,8 @@ export interface Pieces {
   project: string;
   statuses: string[];
   defaults: { template?: string; design?: string };
+  /** Who posts this desk's pieces, from `preview:` in project.yaml (e.g. an organisation's page). */
+  preview?: { author?: string; headline?: string };
   pieces: Piece[];
   templates: Template[];
 }

@@ -121,6 +121,7 @@ class Hub:
     source: str = "hub"                 # 'env' | 'hub' | 'user'
     lake_root_from: str = "config"      # 'SB_LAKE_ROOT' | 'project.yaml' | 'config'
     projects_dir: Path | None = None    # default parent folder for `sb new` outside a hub
+    projects_also: tuple = ()           # [projects] also: further folders whose projects the web view lists
     latex_templates: tuple = ()         # ((name, folder), ...) from [templates.latex]
     deliverable_template: str | None = None   # [templates] deliverable: default for `sb new`
     library: Path = Path()              # <data root>/library: PDFs of papers and their text
@@ -198,6 +199,7 @@ def _load_hub(path: Path, source: str, data_root: str | None, env: tuple) -> Hub
         source=source,
         lake_root_from="SB_LAKE_ROOT" if env_root else "project.yaml" if data_root else "config",
         projects_dir=Path(_expand(pdir)).resolve() if pdir else None,
+        projects_also=tuple(Path(_expand(str(d))).resolve() for d in cfg.get("projects", {}).get("also", []) or []),
         latex_templates=tuple(sorted((k, str(_hub_path(path.parent, v)))
                                      for k, v in cfg.get("templates", {}).get("latex", {}).items())),
         deliverable_template=cfg.get("templates", {}).get("deliverable") or None,

@@ -1,8 +1,8 @@
-import { Select, defineTool, useLink, useSetting, useToolState } from "@werkbank/framework";
+import { Select, defineTool, useLink, useSetting } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, useApi, type Piece, type PieceRender } from "../data/api";
 import { EmptyState, PostPreview, type PreviewImage } from "../kit";
-import { when } from "./lib";
+import { usePanelState, when } from "./lib";
 import { pickPiece, piecesOf, usePieces } from "./pieces.lib";
 
 /**
@@ -40,7 +40,7 @@ const plain = (markdown: string) => markdown.replace(/^#{1,6}\s+/gm, "").replace
 
 function PostPreviewPanel() {
   const { project, data, error } = usePieces();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [linked] = useLink<string | null>("piece");
   const [author] = useSetting<string>("preview.author");
   const [headline] = useSetting<string>("preview.headline");
@@ -98,8 +98,8 @@ function PostPreviewPanel() {
       ))}
       <div className="sb-scroll sb-desk">
         <PostPreview
-          author={author || "Your name"}
-          headline={headline || (author ? undefined : "Set the name and headline under Settings → Post preview")}
+          author={data.preview?.author || author || "Your name"}
+          headline={data.preview?.author ? data.preview.headline : headline || (author ? undefined : "Set the name under Settings → Post preview, or preview: author in project.yaml")}
           meta={piece.status === "scheduled" && piece.scheduled_at ? `Scheduled for ${when(piece.scheduled_at)}` : piece.status === "published" ? `Published ${when(piece.published_at)}` : `${piece.status ?? "draft"}${piece.channel ? ` · ${piece.channel}` : ""}`}
           text={body}
           visibleLines={lines}

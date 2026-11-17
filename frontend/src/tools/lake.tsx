@@ -1,9 +1,9 @@
-import { copyText, defineTool, openContextMenu, useLink, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { copyText, defineTool, openContextMenu, useLink, useSetting, useWerkbank } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, useApi, type Lake, type LakeTable, type QueryResult } from "../data/api";
 import { DataGrid, EmptyState, KeyValue, SplitPane, StatusDot, StatusPill, toCsv } from "../kit";
 import { prefs } from "../prefs";
-import { downloadText, matches, num, show, when } from "./lib";
+import { downloadText, matches, num, show, usePanelState, when } from "./lib";
 
 /**
  * The data lake: every table with its contract, columns, a preview of its rows and the
@@ -18,7 +18,7 @@ const pick = (lake: Lake | undefined, name: unknown) => lake?.tables.find((t) =>
 
 function LakePanel() {
   const wb = useWerkbank();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [linked, setTable] = useLink<string | null>("table");
   const [limit] = useSetting<string>("tables.previewRows");
   const [nullText] = useSetting<string>("tables.nullText");
@@ -30,7 +30,7 @@ function LakePanel() {
   if (!lake) return <EmptyState>{entry.error ?? "Opening the catalog…"}</EmptyState>;
   const shown = lake.tables.filter((t) => matches(state.query, t.name, t.contract?.title, t.comment));
   const schemas = [...new Set(shown.map((t) => t.schema))];
-  const openSql = (t: LakeTable) => void show(wb, "sql", { state: { target: "lake", sql: selectFrom(t), history: [] }, patch: { target: "lake", sql: selectFrom(t) } });
+  const openSql = (t: LakeTable) => void show(wb, "sql", { patch: { target: "lake", sql: selectFrom(t) } });
   const list = (
     <nav aria-label="Tables">
       {schemas.map((schema) => (

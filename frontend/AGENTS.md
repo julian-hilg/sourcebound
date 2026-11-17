@@ -32,18 +32,33 @@ checkout), and you opened the app and used the feature in every theme and in a n
 - `../src/sourcebound/ui.py`: the data service
 - `vendor/`: the Werkbank packages as tarballs, until Werkbank publishes a release
 
-## Panels by category
+## Panels: tools and hubs
 
-Study: Projects, Project, Documents, Agents, Check. Evidence: Hypotheses, Claims, Results, Reviews.
-Deliverables: Deliverable, Deliverables. Pieces: Pieces, Piece, Post preview, Schedule.
-Data: Lake, SQL console, Connections, Jobs, Fetch log. System: System, Assets.
+The Tools list holds nine tools. Six are **hubs** (`src/tools/hubs.ts`): one panel with related views as tabs,
+built by `defineHub` in `src/tools/hub.tsx` from ordinary tool definitions.
+
+| Tool | Tabs (key: file) |
+| --- | --- |
+| Projects | – (`projects.tsx`) |
+| Project | overview: `project.tsx`, documents: `documents.tsx`, check: `check.tsx`, agents: `activity.tsx` |
+| Evidence | hypotheses, claims, results, reviews (`documents.tsx`) |
+| Deliverable | read: `deliverable.tsx`, all: `deliverables.tsx` |
+| Pieces | list beside the tabs: `pieces.tsx`; edit: `piece.tsx`, preview: `postpreview.tsx`, schedule: `schedule.tsx` |
+| Lake, SQL console | – (`lake.tsx`, `sql.tsx`) |
+| Sources | connections, jobs, fetchlog |
+| System | overview: `system.tsx`, assets: `assets.tsx` |
+
+A part reads and writes its state with `usePanelState` from `tools/lib.tsx`, never `useToolState`: inside a hub
+its state lives under its key in the hub's state. A new view that belongs with an existing hub becomes a tab
+there, not a new tool. The Crafter is not part of this app (the owner's decision, 2026-11-17).
 
 Link topics: `project`, `hypothesis`, `claim`, `result`, `piece`, `table`. The preset workspaces put every panel
 into link group 1; open a panel that should follow the selection with `openLinked` from `tools/lib.tsx`.
 Every button or menu entry that brings up another panel uses `show` (or `openLinked`) from `tools/lib.tsx`, never
 `panel.open` directly: it goes to the tool's open panel and opens a new one only when none is open. A second panel
 of a tool comes only from dragging the tool into the layout (the owner's rule, 2026-11-17). Hand-offs pass
-`patch`, which is merged over the open panel's state (the SQL console keeps its history).
+`patch`, which is merged over the panel's state (the SQL console keeps its history); for a hub it names the tab:
+`show(wb, "sources", { patch: { tab: "fetchlog", fetchlog: { … } } })`.
 
 ## Rules of this app
 

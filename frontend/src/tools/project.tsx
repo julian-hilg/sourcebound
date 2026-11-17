@@ -25,7 +25,7 @@ function Project() {
           {d.lang} · created {d.created || "–"}
         </span>
         <span className="sb-grow" />
-        <button className="wb-button" onClick={() => void wb.run("sb.check", { project: id }).then(() => show(wb, "check"))}>
+        <button className="wb-button" onClick={() => void wb.run("sb.check", { project: id }).then(() => show(wb, "project", { patch: { tab: "check" } }))}>
           Check
         </button>
       </div>

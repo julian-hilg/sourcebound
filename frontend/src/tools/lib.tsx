@@ -1,5 +1,5 @@
-import { useLink, type Werkbank } from "@werkbank/framework";
-import type { ReactNode } from "react";
+import { useLink, useToolState, type Werkbank } from "@werkbank/framework";
+import { createContext, useContext, type ReactNode } from "react";
 import { api, paths, useApi, type Detail, type Entry, type Summary } from "../data/api";
 import { EmptyState, StatusPill } from "../kit";
 import { prefs } from "../prefs";
@@ -118,17 +118,17 @@ export const num = (v: number | null | undefined, digits = 0): string => (v === 
 
 /**
  * Go to the open panel of a tool, or open one when none is open. A second panel of the same tool opens only when
- * the person drags the tool from the Tools list into the layout, as a click there does (Werkbank 0.6). `state` is
- * the whole state of a new panel; `patch` is merged over the state of an open one (default: `state`), so a hand-off
- * such as a statement for the SQL console keeps that console's history.
+ * the person drags the tool from the Tools list into the layout, as a click there does. `patch` is merged over the
+ * panel's state, the new one's or the open one's, so a hand-off such as a statement for the SQL console keeps that
+ * console's history. For a hub, `patch` picks the tab (`{ tab: "claims" }`) and may set a part's state.
  */
-export const show = async (
-  wb: Werkbank,
-  toolId: string,
-  { state, patch = state, link }: { state?: Record<string, unknown>; patch?: Record<string, unknown>; link?: "1" } = {},
-) => {
-  const id = wb.openPanelOf(toolId);
-  if (!id) return wb.run("panel.open", { toolId, ...(link ? { link } : {}), ...(state ? { state } : {}) });
+export const show = async (wb: Werkbank, toolId: string, { patch, link }: { patch?: Record<string, unknown>; link?: "1" } = {}) => {
+  let id = wb.openPanelOf(toolId);
+  if (!id) {
+    await wb.run("panel.open", { toolId, ...(link ? { link } : {}) });
+    id = wb.openPanelOf(toolId);
+  }
+  if (!id) return;
   if (patch) await wb.run("panel.setState", { id, patch });
   return wb.run("panel.focus", { id });
 };
@@ -141,3 +141,17 @@ export const showTable = async (wb: Werkbank, table: string) => {
   await wb.run("link.publish", { group: "1", topic: "table", value: table });
   await openLinked(wb, "lake");
 };
+
+/** Which part of a hub a component is drawn in (see `hub.tsx`); null outside a hub. */
+export const HubPart = createContext<string | null>(null);
+
+/**
+ * A panel's persisted state. Inside a hub each part keeps its own state under its key in the hub's state, so the
+ * same component works as a part of a hub and on its own.
+ */
+export function usePanelState<S>(): [S, (next: S) => void] {
+  const part = useContext(HubPart);
+  const [state, setState] = useToolState<Record<string, unknown>>();
+  if (!part) return [state as S, setState as (next: S) => void];
+  return [state[part] as S, (next: S) => setState((current) => ({ ...current, [part]: next }))];
+}

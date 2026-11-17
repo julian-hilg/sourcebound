@@ -1,7 +1,7 @@
-import { defineTool, useLink, useToolState } from "@werkbank/framework";
+import { defineTool, useLink } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, type Detail, type Hypothesis } from "../data/api";
-import { Blank, Status, projectOf, useDetail } from "./lib";
+import { Blank, projectOf, Status, useDetail, usePanelState } from "./lib";
 
 const stateSchema = z.object({ open: z.array(z.string()).max(200) });
 type State = z.infer<typeof stateSchema>;
@@ -10,7 +10,7 @@ const list = (value: string[] | string | undefined) => (Array.isArray(value) ? v
 
 function Hypotheses() {
   const { detail: d, blank } = useDetail();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [selected, setSelected] = useLink<string | null>("hypothesis");
   const [, setClaim] = useLink<string | null>("claim");
   const [, setResult] = useLink<string | null>("result");

@@ -1,4 +1,4 @@
-import { Select, useLink, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, useLink, useSetting, useWerkbank } from "@werkbank/framework";
 import "katex/dist/katex.min.css";
 import { useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -9,7 +9,7 @@ import { paths, useApi, type Handover } from "../data/api";
 import { ConfirmButton } from "../kit";
 import { anchorOf, inlineWith, parse, referenceLine, type Block, type Paper, type Section } from "../reader/markup";
 import { chosen, type State } from "./deliverable";
-import { Blank, useProject, when } from "./lib";
+import { Blank, usePanelState, useProject, when } from "./lib";
 
 const REMARK = [remarkGfm, remarkMath];
 const REHYPE = [rehypeKatex];
@@ -179,7 +179,7 @@ function BlockView({ block: b, reading, project }: { block: Block; reading: Read
 export default function DeliverableView() {
   const wb = useWerkbank();
   const { id, list } = useProject();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [selected, setResult] = useLink<string | null>("result");
   const [font] = useSetting<string>("reader.font");
   const [mark] = useSetting<boolean>("reader.markNumbers");

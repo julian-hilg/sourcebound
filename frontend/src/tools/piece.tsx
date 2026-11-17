@@ -1,11 +1,11 @@
-import { Select, copyText, defineTool, useLink, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, useLink, useSetting, useWerkbank } from "@werkbank/framework";
 import { useState } from "react";
 import { z } from "zod";
 import { paths, type Piece, type PieceCheck } from "../data/api";
 import { ConfirmButton, EmptyState, KeyValue, Section, StatusPill } from "../kit";
 import { prefs } from "../prefs";
 import { weekdays } from "../settings";
-import { Status, when } from "./lib";
+import { Status, usePanelState, when } from "./lib";
 import { STAMP, nextSlot, pickPiece, pieceCard, piecesOf, usePieces } from "./pieces.lib";
 
 /**
@@ -32,7 +32,7 @@ const changed = (p: Piece, d: Draft) => KEYS.filter((k) => d[k] !== draftOf(p)[k
 function PiecePanel() {
   const wb = useWerkbank();
   const { project, data, error } = usePieces();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [linked] = useLink<string | null>("piece");
   const [days] = useSetting<string>("pieces.postingDays");
   const [time] = useSetting<string>("pieces.postingTime");

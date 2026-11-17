@@ -1,8 +1,8 @@
-import { Select, copyText, defineTool, openContextMenu, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useSetting, useWerkbank } from "@werkbank/framework";
 import { ConfirmButton } from "../kit";
 import { z } from "zod";
 import { api, paths, type Detail, type Note } from "../data/api";
-import { Status, projectOf, show, useDetail, when } from "./lib";
+import { projectOf, show, Status, useDetail, usePanelState, when } from "./lib";
 
 /**
  * The deliverables manager: what exists under deliverables/, and what is wanted (notes with a
@@ -37,7 +37,7 @@ const draftOf = (n: Note): Draft => ({ title: n.title, kind: n.kind, status: n.s
 function Deliverables() {
   const wb = useWerkbank();
   const { id, detail: d, blank } = useDetail();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [confirmDelete] = useSetting<boolean>("confirm.delete");
   if (!d || !id) return blank;
   const draft = state.draft;
@@ -95,7 +95,7 @@ function Deliverables() {
                   </td>
                   <td>{f.kind || "–"}</td>
                   <td>
-                    <button className="sb-ref" onClick={() => void show(wb, "deliverable")}>
+                    <button className="sb-ref" onClick={() => void show(wb, "deliverable", { patch: { tab: "read" } })}>
                       Read
                     </button>
                     {f.pdf && (

@@ -67,7 +67,15 @@ recorded. It warns about numbers typed by hand (they must come with a citation),
 with no citation at all, and about a render that shows an older value of a result.
 
 Nothing in Sourcebound posts to a network. `scheduled` records the intention; the frontend
-shows the schedule and a preview; a plugin may prepare a bundle to post by hand.
+shows the schedule and a preview; a plugin may prepare a bundle to post by hand. The preview
+shows the post under the name and headline set in `project.yaml` when a desk posts for someone
+else, such as an organisation's page:
+
+```yaml
+preview: {author: "Example GmbH", headline: "Asset management"}
+```
+
+Without it, the preview uses the name under Settings, Post preview.
 
 ## Formats: renderers, templates, designs, packs
 

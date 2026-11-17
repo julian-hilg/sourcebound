@@ -74,16 +74,19 @@ def _iso(ts: float) -> str:
 def project_roots() -> dict[str, Path]:
     """Every project the configuration knows: {id: folder}.
 
-    The folders directly inside the hub, inside `[projects] dir`, and the project around the
-    working directory.  The id is the slug; a second project with the same slug gets `slug~2`.
+    The folders directly inside the hub, inside `[projects] dir` and each folder of `[projects] also`
+    (a folder there may also be a project itself), and the project around the working directory.
+    The id is the slug; a second project with the same slug gets `slug~2`.
     """
     h = config.hub()
     parents = [h.config_file.parent] if h.source == "hub" and h.config_file else []
     if h.projects_dir:
         parents.append(h.projects_dir)
+    parents += [p for p in h.projects_also if not (p / "project.yaml").exists()]
+    direct = [p for p in h.projects_also if (p / "project.yaml").exists()]
     found: list[Path] = []
     here = config.find_up("project.yaml")
-    for d in ([here] if here else []) + [d for p in parents if p.is_dir() for d in sorted(p.iterdir())]:
+    for d in ([here] if here else []) + direct + [d for p in parents if p.is_dir() for d in sorted(p.iterdir())]:
         if d.is_dir() and not d.name.startswith(".") and (d / "project.yaml").exists() and d.resolve() not in found:
             found.append(d.resolve())
     out: dict[str, Path] = {}
@@ -339,7 +342,9 @@ def note(pid: str, body: dict) -> dict:
 def pieces_of(pid: str) -> dict:
     from . import assets, pieces
     p = _project(pid)
+    preview = p.meta.get("preview") if isinstance(p.meta.get("preview"), dict) else {}
     return {"project": pid, "statuses": pieces.STATUS, "defaults": p.meta.get("piece_defaults") or {},
+            "preview": {k: str(preview[k]) for k in ("author", "headline") if preview.get(k)},
             "pieces": pieces.summary(p),
             "templates": [t for t in assets.templates() if not t["for"] or "piece" in t["for"]]}
 

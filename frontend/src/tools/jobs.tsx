@@ -1,10 +1,10 @@
-import { copyText, defineTool, openContextMenu, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { copyText, defineTool, openContextMenu, useSetting, useWerkbank } from "@werkbank/framework";
 import { useState } from "react";
 import { z } from "zod";
 import { api, paths, useApi, type Job, type JobRun, type Jobs } from "../data/api";
 import { CodeBlock, CommandLine, ConfirmButton, EmptyState, KeyValue, Section, SplitPane, StatusDot, StatusPill } from "../kit";
 import { prefs } from "../prefs";
-import { ago, showTable, tone, when } from "./lib";
+import { ago, showTable, tone, usePanelState, when } from "./lib";
 
 /**
  * Jobs: pipelines that run again and again and keep a lake table current (continuous
@@ -19,7 +19,7 @@ const state_ = (j: Job) => (j.error ? "broken" : !j.enabled ? "off" : j.due ? "d
 
 function JobsPanel() {
   const wb = useWerkbank();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [confirm] = useSetting<boolean>("confirm.jobRun");
   const entry = useApi<Jobs>(paths.jobs, prefs.every.jobs);
   const [running, setRunning] = useState<string | null>(null);

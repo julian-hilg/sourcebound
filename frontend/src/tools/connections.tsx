@@ -1,11 +1,11 @@
-import { Select, copyText, defineTool, openContextMenu, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useWerkbank } from "@werkbank/framework";
 import { useState } from "react";
 import { z } from "zod";
 import { api, paths, useApi, type Connections, type DatabaseDriver, type DataSource, type McpServer } from "../data/api";
 import { AUTH_LABEL, DRIVERS, blankDraft, checkDraft, toDraft, type Draft } from "../data/databases";
 import { CommandLine, EmptyState, KeyValue, Section, SplitPane, StatusDot, StatusPill, type Tone } from "../kit";
 import { prefs } from "../prefs";
-import { ago, show, showTable, tone, when } from "./lib";
+import { ago, show, showTable, tone, usePanelState, when } from "./lib";
 
 /**
  * Data connections: every registered source (API, download, database, manual files) with what
@@ -217,7 +217,7 @@ function DatabaseForm({ source, state, setState }: { source: DataSource | null; 
       </div>
       {!dirty && conn?.ready && test_?.status === "ok" && (
         <p>
-          <button className="wb-button" type="button" onClick={() => void show(wb, "sql", { state: { target: source!.id, sql: "SELECT 1", history: [] }, patch: { target: source!.id, sql: "SELECT 1" } })}>
+          <button className="wb-button" type="button" onClick={() => void show(wb, "sql", { patch: { target: source!.id, sql: "SELECT 1" } })}>
             Open a SQL console on it
           </button>
         </p>
@@ -229,7 +229,7 @@ function DatabaseForm({ source, state, setState }: { source: DataSource | null; 
 
 function ConnectionsPanel() {
   const wb = useWerkbank();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const entry = useApi<Connections>(paths.connections, prefs.every.system);
   const c = entry.data;
   if (!c) return <EmptyState>{entry.error ?? "Loading…"}</EmptyState>;
@@ -258,8 +258,8 @@ function ConnectionsPanel() {
           onContextMenu={(e) =>
             openContextMenu(wb, e, [
               s.connection && { label: "Test connection", run: () => void wb.run("connection.test", { id: s.id }) },
-              s.database && { label: "Open a SQL console on it", run: () => void show(wb, "sql", { state: { target: s.id, sql: "SELECT 1", history: [] }, patch: { target: s.id, sql: "SELECT 1" } }) },
-              { label: "Show its requests in the fetch log", run: () => void show(wb, "fetchlog", { state: { source: s.id, outcome: "all", query: "" } }) },
+              s.database && { label: "Open a SQL console on it", run: () => void show(wb, "sql", { patch: { target: s.id, sql: "SELECT 1" } }) },
+              { label: "Show its requests in the fetch log", run: () => void show(wb, "sources", { patch: { tab: "fetchlog", fetchlog: { source: s.id, outcome: "all", query: "" } } }) },
               { label: "Copy id", run: () => copyText(s.id) },
               s.url ? { label: "Copy address", run: () => copyText(s.url) } : null,
             ])
@@ -330,7 +330,7 @@ function ConnectionsPanel() {
       />
       {source.database && (
         <p>
-          <button className="wb-button" onClick={() => void show(wb, "sql", { state: { target: source.id, sql: "SELECT 1", history: [] }, patch: { target: source.id, sql: "SELECT 1" } })}>
+          <button className="wb-button" onClick={() => void show(wb, "sql", { patch: { target: source.id, sql: "SELECT 1" } })}>
             Open a SQL console on it
           </button>
         </p>

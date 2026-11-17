@@ -21,7 +21,9 @@ function System() {
   const errors = s.problems.filter((p) => p.level === "error");
   const todo = s.setup.filter((x) => !x.done);
   const stored = s.storage.reduce((sum, x) => sum + (x.bytes ?? 0), 0);
-  const open = (toolId: string) => void show(wb, toolId);
+  /** Where each tile leads: a tool, or a tab of a hub. */
+  const open = (to: "lake" | "connections" | "jobs" | "assets") =>
+    void (to === "lake" ? show(wb, "lake") : to === "assets" ? show(wb, "system", { patch: { tab: "assets" } }) : show(wb, "sources", { patch: { tab: to } }));
   return (
     <PanelBody
       head={

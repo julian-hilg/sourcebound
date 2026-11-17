@@ -1,10 +1,10 @@
-import { Select, copyText, defineTool, openContextMenu, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useSetting, useWerkbank } from "@werkbank/framework";
 import { useState } from "react";
 import { z } from "zod";
 import { api, paths, useApi, type Connections, type Lake, type QueryResult } from "../data/api";
 import { DataGrid, toCsv } from "../kit";
 import { prefs } from "../prefs";
-import { downloadText, num } from "./lib";
+import { downloadText, num, usePanelState } from "./lib";
 
 /**
  * A read-only SQL console on the data lake and on registered database sources. The pattern is
@@ -23,7 +23,7 @@ const START = "SELECT schema_name, table_name, estimated_size AS rows\nFROM duck
 
 function SqlConsole() {
   const wb = useWerkbank();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [keep] = useSetting<number>("sql.historyLength");
   const [limit] = useSetting<string>("sql.rowLimit");
   const [wrap] = useSetting<boolean>("sql.wrapEditor");

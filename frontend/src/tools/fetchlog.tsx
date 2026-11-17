@@ -1,8 +1,8 @@
-import { Select, copyText, defineTool, openContextMenu, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useSetting, useWerkbank } from "@werkbank/framework";
 import { prefs } from "../prefs";
 import { z } from "zod";
 import { api, paths, useApi, type FetchLog } from "../data/api";
-import { Blank, matches, when } from "./lib";
+import { Blank, matches, usePanelState, when } from "./lib";
 
 const stateSchema = z.object({ source: z.string().max(80), outcome: z.enum(["all", "stored", "refused"]), query: z.string().max(120) });
 type State = z.infer<typeof stateSchema>;
@@ -19,7 +19,7 @@ const select = (log: FetchLog, state: State) =>
 
 function FetchLogPanel() {
   const wb = useWerkbank();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const log = useApi<FetchLog>(paths.fetch, prefs.every.jobs);
   const [maxRows] = useSetting<number>("fetchlog.maxRows");
   if (!log.data) return <Blank>{log.error ?? "Loading…"}</Blank>;

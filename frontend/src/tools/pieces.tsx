@@ -1,9 +1,9 @@
-import { Select, copyText, defineTool, openContextMenu, useLink, useSetting, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useLink, useSetting, useWerkbank } from "@werkbank/framework";
 import { z } from "zod";
 import type { Piece } from "../data/api";
 import { EmptyState } from "../kit";
 import { prefs } from "../prefs";
-import { Status, counts, matches, openLinked, when } from "./lib";
+import { counts, matches, show, Status, usePanelState, when } from "./lib";
 import { pickPiece, pieceCard, piecesOf, usePieces } from "./pieces.lib";
 
 /**
@@ -21,7 +21,7 @@ const select = (pieces: Piece[], state: State) =>
 function PiecesPanel() {
   const wb = useWerkbank();
   const { project, data, error } = usePieces();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [selected, setSelected] = useLink<string | null>("piece");
   const [template] = useSetting<string>("pieces.template");
   const [kind] = useSetting<string>("pieces.kind");
@@ -85,12 +85,12 @@ function PiecesPanel() {
                 aria-selected={p.id === current?.id}
                 tabIndex={0}
                 onClick={() => setSelected(p.id)}
-                onDoubleClick={() => void openLinked(wb, "piece")}
+                onDoubleClick={() => void show(wb, "pieces", { patch: { tab: "edit" }, link: "1" })}
                 onKeyDown={(e) => e.key === "Enter" && setSelected(p.id)}
                 onContextMenu={(e) =>
                   openContextMenu(wb, e, [
-                    { label: "Edit", run: () => (setSelected(p.id), void openLinked(wb, "piece")) },
-                    { label: "Preview", run: () => (setSelected(p.id), void openLinked(wb, "postpreview")) },
+                    { label: "Edit", run: () => (setSelected(p.id), void show(wb, "pieces", { patch: { tab: "edit" }, link: "1" })) },
+                    { label: "Preview", run: () => (setSelected(p.id), void show(wb, "pieces", { patch: { tab: "preview" }, link: "1" })) },
                     { heading: "Status" },
                     ...(["idea", "draft", "review", "dropped"] as const).map((status) => ({ label: status, checked: p.status === status, run: () => void wb.run("piece.update", { project, id: p.id, patch: { status } }) })),
                     { label: "approved (your decision)", checked: p.status === "approved", run: () => void wb.run("piece.decide", { project, id: p.id, status: "approved" }) },

@@ -31,22 +31,35 @@ hypotheses, unblock a host or publish: the gates stay in the conversation and th
 
 ## What it shows
 
-| Panel | Content | Read from |
+Related views are tabs of one panel: *Project*, *Evidence*, *Deliverable*, *Pieces*, *Sources* and *System*
+are such hubs. A link or a button that leads to a view opens its tab; a click in the Tools list goes to a
+panel that is already open, and dragging a tool into the layout opens a second one.
+
+| View (hub, tab) | Content | Read from |
 | --- | --- | --- |
 | Projects | every project: phase, gates G1 to G3, counts, last change | `project.yaml`, ledger files |
-| Project | phases and gates, pre-registration, research log | `project.yaml`, `hypotheses.yaml`, `log.md` |
-| Hypotheses | registered fields, results, and whether a hypothesis changed after the freeze | `hypotheses.yaml` |
-| Claims | the claim ledger with evidence, stance, locator and quote | `evidence/claims.yaml`, `evidence/sources.yaml` |
-| Results | every recorded number with script, commit and data snapshot | `results/results.json` |
-| Reviews, Documents | verification and referee reports; brief, landscape, notes, log | `reviews/`, `research/`, `log.md` |
-| Deliverable | a deliverable rendered from the handover (see below) | `dist/handover/` |
-| Deliverables | deliverable folders, and the notes: what is wanted, status, stored prompt | `deliverables/` |
-| Check | output of `sb check` and `sb review-edits` | runs the command |
-| Fetch log | the fetcher's requests and the hosts it stopped | `<data root>/raw/<source>/manifest.jsonl` |
-| Agents | what Claude Code sessions and subagents are doing | `<data root>/activity/events.jsonl` |
+| Project, Overview | phases and gates, pre-registration, research log | `project.yaml`, `hypotheses.yaml`, `log.md` |
+| Evidence, Hypotheses | registered fields, results, and whether a hypothesis changed after the freeze | `hypotheses.yaml` |
+| Evidence, Claims | the claim ledger with evidence, stance, locator and quote | `evidence/claims.yaml`, `evidence/sources.yaml` |
+| Evidence, Results | every recorded number with script, commit and data snapshot | `results/results.json` |
+| Evidence, Reviews; Project, Documents | verification and referee reports; brief, landscape, notes, log | `reviews/`, `research/`, `log.md` |
+| Deliverable, Read | a deliverable rendered from the handover (see below) | `dist/handover/` |
+| Deliverable, All and planned | deliverable folders, and the notes: what is wanted, status, stored prompt | `deliverables/` |
+| Project, Check | output of `sb check` and `sb review-edits` | runs the command |
+| Sources, Fetch log | the fetcher's requests and the hosts it stopped | `<data root>/raw/<source>/manifest.jsonl` |
+| Project, Agents | what Claude Code sessions and subagents are doing | `<data root>/activity/events.jsonl` |
 
-Projects are found in the hub folder, in `[projects] dir` of the configuration, and around
-the folder `sb ui` was started in. The gates are read from the files, not stored: G1 from the
+Projects are found in the hub folder, in `[projects] dir` of the configuration, in each folder
+listed under `[projects] also` (a folder of projects, or one project), and around the folder
+`sb ui` was started in:
+
+```toml
+[projects]
+dir  = "~/research"
+also = ["~/work/desks", "~/work/one-project"]
+```
+
+ The gates are read from the files, not stored: G1 from the
 phase and the log line that names it, G2 from the freeze record, G3 from the phase.
 
 Panels of one link group share the selected project, hypothesis, claim and result. A number

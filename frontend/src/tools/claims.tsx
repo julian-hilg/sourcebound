@@ -1,8 +1,8 @@
-import { Select, copyText, defineTool, openContextMenu, useLink, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useLink, useWerkbank } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, type Claim, type Detail } from "../data/api";
 import { prefs } from "../prefs";
-import { Blank, Status, counts, downloadCsv, matches, projectOf, useDetail } from "./lib";
+import { Blank, counts, downloadCsv, matches, projectOf, Status, useDetail, usePanelState } from "./lib";
 
 const stateSchema = z.object({ query: z.string().max(120), status: z.string().max(20), kind: z.string().max(20) });
 type State = z.infer<typeof stateSchema>;
@@ -21,7 +21,7 @@ const refKind = (ref: string) => (ref.startsWith("R:") ? "result" : ref.startsWi
 function Claims() {
   const wb = useWerkbank();
   const { detail: d, blank } = useDetail();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [selected, setSelected] = useLink<string | null>("claim");
   const [, setResult] = useLink<string | null>("result");
   if (!d) return blank;

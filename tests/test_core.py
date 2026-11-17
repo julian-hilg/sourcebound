@@ -1068,6 +1068,20 @@ def test_web_view_finds_node_on_the_path_or_in_wsl(tmp_path, monkeypatch):
     assert ui._node_tool("npm", tmp_path) is None
 
 
+def test_web_view_lists_projects_of_further_folders(hub, tmp_path, monkeypatch):
+    import dataclasses
+    from sourcebound import config, ui
+    from sourcebound.cli import main
+    main(["new", "study", "--title", "A Study"])
+    elsewhere = tmp_path / "elsewhere"                      # a folder of projects, and a project on its own
+    for d, slug in ((elsewhere / "desk-a", "desk_a"), (tmp_path / "single", "single")):
+        d.mkdir(parents=True)
+        (d / "project.yaml").write_text(f"slug: {slug}\nkind: desk\n", encoding="utf-8")
+    real = config.hub()
+    monkeypatch.setattr(ui.config, "hub", lambda: dataclasses.replace(real, projects_also=(elsewhere, tmp_path / "single")))
+    assert set(ui.project_roots()) == {"study", "desk_a", "single"}
+
+
 def test_web_view_reads_the_project_files(hub, monkeypatch):
     from sourcebound import ui
     from sourcebound.cli import main
@@ -1418,6 +1432,10 @@ def test_system_report_and_new_endpoints(desk):
     assert ui.piece("topic", {"op": "check", "id": pid})["errors"] == ["source W-0001 is cited but not in evidence/sources.yaml (sb snap URL, or sb doc FILE)"]
     r = ui.piece("topic", {"op": "render", "id": pid, "template": "text"})["render"]
     listed = ui.pieces_of("topic")
+    assert listed["preview"] == {}                              # who posts: from project.yaml, else the person's setting
+    card = ui.project_roots()["topic"] / "project.yaml"
+    card.write_text(card.read_text(encoding="utf-8") + 'preview: {author: "Example GmbH", headline: ""}\n', encoding="utf-8")
+    assert ui.pieces_of("topic")["preview"] == {"author": "Example GmbH"}
     assert listed["pieces"][0]["renders"][0]["files"] == [f"pieces/{pid}/render/text/{pid}.txt"] and r["files"] == [f"{pid}.txt"]
     assert ui.text_file("topic", f"pieces/{pid}/render/text/{pid}.txt")["text"].startswith("Text [1].")
     assert ui.piece("topic", {"op": "rm", "id": pid})["removed"]["title"] == "Über die API" and pieces.load() == []

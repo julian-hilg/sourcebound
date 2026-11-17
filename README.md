@@ -219,12 +219,15 @@ reads and drives it like a person does, and anything that writes waits for appro
 
 | Workspace | Panels |
 | --- | --- |
-| Study | projects, project card with phases and gates, the deliverable reader, hypotheses, claims, results, agent activity, checks |
-| Evidence | hypotheses, claims ledger, results, reviews, documents |
+| Study | projects, the project (phases, gates, documents, checks, agent activity), the deliverable reader, the evidence (hypotheses, claims, results, reviews) |
+| Evidence | projects and project beside the evidence |
 | Reading | a deliverable rendered from the handover without LaTeX; a click on a number selects the result behind it |
-| Desk | pieces, the piece editor, post preview, schedule |
-| Data | lake explorer, read-only SQL console, connections, jobs, fetch log |
-| System | what is installed and configured, designs, templates and plugins |
+| Desk | the pieces of a desk beside the editor, post preview and schedule |
+| Data | lake explorer, read-only SQL console, sources (connections, jobs, fetch log) |
+| System | what is installed and configured, designs, templates and plugins; sources |
+
+Related views are tabs of one panel (Project, Evidence, Deliverable, Pieces, Sources, System), so a
+workspace needs few panels.
 
 Details: [docs/frontend.md](docs/frontend.md).
 

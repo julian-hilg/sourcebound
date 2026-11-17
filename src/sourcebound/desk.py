@@ -36,6 +36,12 @@ piece_defaults:
   template: ""
   design: ""
 
+# Who posts the pieces, as the post preview of the web view shows it (e.g. an organisation's page);
+# without it the preview uses the name under Settings -> Post preview.
+# preview:
+#   author: ""
+#   headline: ""
+
 # Lake tables this desk reads (shared domains) and owns (proj_<slug>)
 reads: []
 owns: []

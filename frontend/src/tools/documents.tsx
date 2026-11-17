@@ -1,8 +1,8 @@
-import { Markdown, Select, defineTool, useToolState } from "@werkbank/framework";
+import { Markdown, Select, defineTool } from "@werkbank/framework";
 import { z } from "zod";
 import { api, paths, useApi, type Detail, type DocumentFile } from "../data/api";
 import { prefs } from "../prefs";
-import { Blank, downloadText, projectOf, useDetail, when } from "./lib";
+import { Blank, downloadText, projectOf, useDetail, usePanelState, when } from "./lib";
 
 /**
  * A reader for a project's Markdown files. Two tools share it: Documents (brief, landscape,
@@ -23,7 +23,7 @@ const chosen = (files: DocumentFile[], state: State) => files.find((f) => f.path
 function reader(reviews: boolean) {
   return function Documents() {
     const { id, detail: d, blank } = useDetail();
-    const [state, setState] = useToolState<State>();
+    const [state, setState] = usePanelState<State>();
     const files = d ? offered(d, reviews) : [];
     const file = chosen(files, state);
     const text = useApi<TextFile>(id && file ? paths.file(id, file.path) : null);

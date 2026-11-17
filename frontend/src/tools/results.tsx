@@ -1,9 +1,9 @@
-import { Select, copyText, defineTool, openContextMenu, useLink, useToolState, useWerkbank } from "@werkbank/framework";
+import { Select, copyText, defineTool, openContextMenu, useLink, useWerkbank } from "@werkbank/framework";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 import { api, paths, type Detail, type Result } from "../data/api";
 import { prefs } from "../prefs";
-import { Blank, downloadCsv, matches, projectOf, useDetail, when } from "./lib";
+import { Blank, downloadCsv, matches, projectOf, useDetail, usePanelState, when } from "./lib";
 
 const stateSchema = z.object({ query: z.string().max(120), hypothesis: z.string().max(40) });
 type State = z.infer<typeof stateSchema>;
@@ -23,7 +23,7 @@ const snapshots = (r: Result) =>
 function Results() {
   const wb = useWerkbank();
   const { detail: d, blank } = useDetail();
-  const [state, setState] = useToolState<State>();
+  const [state, setState] = usePanelState<State>();
   const [selected, setSelected] = useLink<string | null>("result");
   const [, setHypothesis] = useLink<string | null>("hypothesis");
   const row = useRef<HTMLTableRowElement | null>(null);
