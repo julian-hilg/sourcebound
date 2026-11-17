@@ -10,7 +10,8 @@ sb ui                # http://127.0.0.1:5210
 ```
 
 `--build` needs Node.js 22 or newer. Without a build, `sb ui` still serves the data and says
-how to build the page.
+how to build the page. On Windows without Node.js on the `PATH`, `sb ui` uses the Node.js
+inside WSL for the build and the agent bridge (the checkout must be on a drive WSL can reach).
 
 ## No second source of truth
 

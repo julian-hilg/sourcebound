@@ -882,6 +882,19 @@ name: analyst  % not a comment
     assert "```\nname: analyst  % not a comment\n  -- kept as written\n```" in md
 
 
+def test_web_view_finds_node_on_the_path_or_in_wsl(tmp_path, monkeypatch):
+    from sourcebound import ui
+    found = {"npm": "/usr/bin/npm"}
+    monkeypatch.setattr(ui.shutil, "which", lambda name: found.get(name))
+    assert ui._node_tool("npm", tmp_path) == ["/usr/bin/npm"]
+    found = {"wsl.exe": r"C:\Windows\System32\wsl.exe"}            # Windows without Node, but with WSL
+    monkeypatch.setattr(ui.sys, "platform", "win32")
+    cmd = ui._node_tool("npm", tmp_path)
+    assert ui._in_wsl(cmd) and cmd[-1] == str(tmp_path) and cmd[-3].endswith('&& npm "$@"')
+    monkeypatch.setattr(ui.sys, "platform", "linux")               # elsewhere there is no fallback
+    assert ui._node_tool("npm", tmp_path) is None
+
+
 def test_web_view_reads_the_project_files(hub, monkeypatch):
     from sourcebound import ui
     from sourcebound.cli import main

@@ -619,28 +619,77 @@ npm run build</pre>
 """
 
 
+BRIDGE_SCRIPT = "node_modules/@werkbank/bridge/src/server.js"
+
+
+def _drive_path(path: Path) -> str:
+    """A UNC path (\\\\server\\share\\...) as the mapped drive that reaches it (Z:\\...); WSL knows only drives."""
+    p = str(path)
+    if p.startswith("\\\\"):
+        import os
+        import string
+        for letter in string.ascii_uppercase:
+            root = f"{letter}:\\"
+            if os.path.exists(root):
+                unc = os.path.realpath(root).rstrip("\\")
+                if unc.startswith("\\\\") and (p.lower() + "\\").startswith(unc.lower() + "\\"):
+                    return root + p[len(unc):].lstrip("\\")
+    return p
+
+
+def _node_tool(tool: str, cwd: Path) -> list[str] | None:
+    """How to run `node` or `npm` (or any command) in `cwd`: the one on the PATH, else (Windows) inside WSL.
+
+    In WSL the command runs in an interactive shell so that version managers (nvm, fnm) and the
+    user's own setup apply. The folder is changed inside that shell: if WSL cannot reach it,
+    the command fails instead of running somewhere else."""
+    found = shutil.which(tool)
+    if found:
+        return [found]
+    if sys.platform == "win32" and shutil.which("wsl.exe"):
+        return ["wsl.exe", "--exec", "bash", "-ic", f'cd "$(wslpath -u "$1")" && shift && {tool} "$@"', "bash", _drive_path(cwd)]
+    return None
+
+
+def _in_wsl(cmd: list[str]) -> bool:
+    return Path(cmd[0]).name.lower() == "wsl.exe"
+
+
 def _bridge() -> subprocess.Popen | None:
     """The Werkbank agent bridge, if the frontend's packages are installed (agents drive the app through it)."""
     home = config.home()
-    script = home / "frontend" / "node_modules" / "@werkbank" / "bridge" / "src" / "server.js" if home else None
-    node = shutil.which("node")
-    if script is None or not script.exists() or node is None:
+    if home is None or not (home / "frontend" / "package.json").exists():
         return None
-    return subprocess.Popen([node, str(script), "--hub"], cwd=home / "frontend", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    front = home / "frontend"
+    node = _node_tool("node", front)
+    if node is None:
+        return None
+    if _in_wsl(node):
+        # node_modules may live on the Linux side only (invisible from Windows): ask WSL whether it is there
+        probe = node[:4] + [f'cd "$(wslpath -u "$1")" && test -f {BRIDGE_SCRIPT}', "bash", node[-1]]
+        if subprocess.run(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+            return None
+    elif not (front / BRIDGE_SCRIPT).exists():
+        return None
+    return subprocess.Popen(node + [BRIDGE_SCRIPT, "--hub"], cwd=None if _in_wsl(node) else front,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def build_frontend() -> None:
     """Install the frontend's packages (first time) and build it: what `sb ui --build` does."""
     home = config.home()
-    npm = shutil.which("npm")
     if home is None or not (home / "frontend" / "package.json").exists():
         raise RuntimeError("the frontend is part of the Sourcebound checkout (folder frontend/); this installation has none")
+    front = home / "frontend"
+    npm = _node_tool("npm", front)
     if npm is None:
         raise RuntimeError("building the frontend needs Node.js 22 or newer (npm was not found)")
-    front = home / "frontend"
-    for step in ([npm, "install"] if not (front / "node_modules").exists() else None, [npm, "run", "build"]):
-        if step and subprocess.run(step, cwd=front).returncode:
-            raise RuntimeError(f"`{' '.join(step[1:])}` failed in {front}")
+    if _in_wsl(npm):
+        print("npm is not on the PATH; using the one in WSL", flush=True)
+    installed = (front / "node_modules").exists() and any((front / "node_modules").iterdir())
+    for step in (None if installed else ["install"], ["run", "build"]):
+        if step and subprocess.run(npm + step, cwd=None if _in_wsl(npm) else front).returncode:
+            raise RuntimeError(f"`npm {' '.join(step)}` failed in {front}")
 
 
 def serve(port: int = PORT, *, open_browser: bool = True, bridge: bool = True) -> None:
