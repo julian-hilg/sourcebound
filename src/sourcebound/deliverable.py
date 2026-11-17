@@ -116,8 +116,10 @@ def diagrams(project: config.Project | None = None) -> dict[str, str]:
     res = p.root / "results" / "results.tex"
     report: dict[str, str] = {}
     for src in sorted((p.root / "figures" / "tikz").glob("*.tex")):
-        if "\\begin{tikzpicture}" not in src.read_text(encoding="utf-8", errors="replace"):
+        code = src.read_text(encoding="utf-8", errors="replace")
+        if "\\begin{tikzpicture}" not in code:
             continue
+        plots = "\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.18}\n" if re.search(r"\\begin\{(?:semilog[xy]|loglog)?axis\}|\\addplot", code) else ""
         pdf = src.with_suffix(".pdf")
         if pdf.exists() and pdf.stat().st_mtime >= src.stat().st_mtime:
             report[src.stem] = "up to date"
@@ -127,7 +129,7 @@ def diagrams(project: config.Project | None = None) -> dict[str, str]:
             with tempfile.TemporaryDirectory() as tmp:
                 # files by name, found through TEXINPUTS: no absolute path inside a .tex file, so a TeX
                 # that sees the disk under other names (TeX Live in WSL, a container) reads them too
-                extra = "\\usepackage{sbresults}\n\\sbresults{%s}\n" % res.name if res.exists() else ""
+                extra = plots + ("\\usepackage{sbresults}\n\\sbresults{%s}\n" % res.name if res.exists() else "")
                 main = Path(tmp) / "sb-standalone-diagram.tex"
                 main.write_text(STANDALONE % (extra, src.name), encoding="utf-8")
                 search = [str(x) for x in (latex, src.parent, res.parent if res.exists() else None) if x]
