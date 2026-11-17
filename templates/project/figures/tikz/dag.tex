@@ -1,0 +1,19 @@
+% Causal DAG template: treatment D, outcome Y, observed confounder X, mediator M,
+% unobserved confounder U (dashed). Include with \input{generated/tikz/dag.tex}
+\begin{tikzpicture}[sb, x=1cm, y=1cm]
+  \node[sb var] (D) at (0, 0)    {$D$};
+  \node[sb var] (Y) at (4.4, 0)  {$Y$};
+  \node[sb var] (M) at (2.2, 1.0) {$M$};
+  \node[sb var] (X) at (2.2, 2.4) {$X$};
+  \node[sb latent] (U) at (2.2, -1.4) {$U$};
+  \draw[sb arrow] (D) -- (Y);
+  \draw[sb arrow] (D) -- (M);
+  \draw[sb arrow] (M) -- (Y);
+  \draw[sb arrow] (X) to[bend right=20] (D);
+  \draw[sb arrow] (X) to[bend left=20] (Y);
+  \draw[sb arrow, sb dashed] (U) -- (D);
+  \draw[sb arrow, sb dashed] (U) -- (Y);
+  \node[sb label, right=1mm of U] {unobserved};
+  \node[sb label, right=1mm of X] {confounder};
+  \node[sb label, right=1mm of M] {mediator};
+\end{tikzpicture}

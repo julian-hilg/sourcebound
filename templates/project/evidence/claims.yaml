@@ -1,0 +1,40 @@
+# Claim ledger: every substantive statement and the evidence behind it.
+#
+#   id        C001, C002, ...
+#   text      the statement, one sentence
+#   kind      fact | literature | empirical | estimate | definition | assumption
+#   status    open | supported | contested | refuted
+#   evidence  list of {ref, loc, quote, stance}
+#               ref:    Zotero citekey | W-0001 (evidence/sources.yaml) | R:<result key> | data:<schema.table>@<snapshot>
+#               loc:    page, section, table ("p. 12", "Tab. 2")
+#               quote:  short verbatim quote (preferred for web sources)
+#               stance: supports | contradicts | context
+#   hypotheses  ids this claim motivates or is decided by
+claims:
+- id: C001
+  text: Daily returns of liquid financial assets are heavy-tailed.
+  kind: literature
+  status: supported
+  evidence:
+  - ref: Cont2001EmpiricalProperties
+    loc: Sec. 2 (stylised fact "heavy tails")
+    stance: supports
+  hypotheses: [H1, H2]
+- id: C002
+  text: The ECB publishes euro reference exchange rates every working day except TARGET closing days.
+  kind: fact
+  status: supported
+  evidence:
+  - ref: W-0001
+    quote: "The reference rates are usually updated at around 16:00 CET every working day, except on TARGET closing days."
+    stance: supports
+- id: C003
+  text: A normal model understates the frequency of 3-sigma days in daily EUR/USD returns several-fold.
+  kind: empirical
+  status: supported
+  evidence:
+  - ref: R:h2.ratio
+    stance: supports
+  - ref: R:h2.pvalue
+    stance: supports
+  hypotheses: [H2]

@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # the standard installation: the core alone must pass
+      - run: uv sync
+      - run: uv run pytest -q tests pipelines
+      # with the format plugins (Word, slides)
+      - run: uv sync --extra word --extra linkedin
+      - run: uv run pytest -q
+      - name: launcher (shell)
+        shell: bash
+        run: uv run sb install --bin sbbin && ./sbbin/sb which home
+      - name: launcher (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\sbbin\sb.cmd which home
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

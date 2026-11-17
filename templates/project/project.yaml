@@ -1,0 +1,33 @@
+# Project card: read by sb, the agents and the publisher.
+slug: example_study
+title: "Example Study: Fat Tails in Daily EUR/USD Returns"
+lang: en                       # en | de (numbers, deliverable language)
+created: 2026-11-09
+owner: Your Name
+phase: deliverables            # brief | landscape | hypotheses | data | analysis | review | deliverables | published
+zotero_collection: research/example_study
+
+# Lake tables this project reads (shared domains) and owns (proj_<slug>)
+reads: [market.ecb_fx_daily]
+owns: []
+
+deliverables:
+  - {kind: paper, path: deliverables/paper/main.tex, pdf: deliverables/example_study.pdf}
+
+publish:
+  repo: example-study          # github.com/<owner>/<repo>
+  visibility: private          # private | public (the push itself is confirmed by the user)
+  pdf: deliverables/example_study.pdf
+  include:                     # allowlist; .tex/.bib/raw data are excluded regardless
+    - analysis/
+    - pipelines/
+    - contracts/
+    - figures/make_figures.py
+    - figures/*.pdf
+    - tables/*.csv
+    - results/results.json
+    - hypotheses.yaml
+    - evidence/claims.yaml
+    - evidence/sources.yaml
+  data: [market.ecb_fx_daily]  # exported to dist/data (Parquet + datapackage.json), not git
+  data_url: ""                 # e.g. https://zenodo.org/records/<id>/files  or an R2 public URL

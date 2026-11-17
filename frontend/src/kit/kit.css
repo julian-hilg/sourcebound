@@ -1,0 +1,479 @@
+/*
+ * Styles of the kit, prefix kit-. Tokens only (--wb-*), so every theme works. Two custom
+ * properties may be set by an app on any ancestor: --kit-row-pad (vertical padding of
+ * rows in lists) and --kit-gap.
+ */
+
+/* ---- frame ---------------------------------------------------------------- */
+.kit-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.kit-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 16px;
+}
+.kit-panel-body[data-flush] {
+  padding: 0;
+}
+.kit-grow {
+  flex: 1;
+}
+.kit-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- split: list and detail; the panel's width decides the direction ---------- */
+.kit-split {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  container-type: inline-size;
+}
+.kit-split-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.kit-split-list {
+  flex: 1 1 40%;
+  min-height: 80px;
+  overflow: auto;
+}
+.kit-split-detail {
+  flex: 1 1 60%;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--wb-border);
+}
+@container (min-width: 640px) {
+  .kit-split-inner {
+    flex-direction: row;
+  }
+  .kit-split-inner > .kit-split-list:not(:only-child) {
+    flex: 0 0 var(--kit-split-list, 320px);
+    max-width: 50%;
+  }
+  .kit-split-detail {
+    border-top: 0;
+    border-left: 1px solid var(--wb-border);
+  }
+}
+
+/* ---- words and marks ------------------------------------------------------- */
+.kit-pill {
+  white-space: nowrap;
+}
+.kit-pill[data-outlined] {
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: var(--wb-radius);
+  font-size: calc(var(--wb-font-size) - 1px);
+}
+.kit-pill[data-tone="good"],
+.kit-tile-value[data-tone="good"] {
+  color: var(--wb-good);
+}
+.kit-pill[data-tone="bad"],
+.kit-tile-value[data-tone="bad"] {
+  color: var(--wb-bad);
+}
+.kit-pill[data-tone="warn"],
+.kit-tile-value[data-tone="warn"] {
+  color: var(--wb-warn);
+}
+.kit-pill[data-tone="accent"] {
+  color: var(--wb-accent);
+}
+.kit-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--wb-text-dim);
+  background: transparent;
+}
+.kit-dot[data-tone="good"] {
+  background: var(--wb-good);
+  border-color: var(--wb-good);
+}
+.kit-dot[data-tone="bad"] {
+  background: var(--wb-bad);
+  border-color: var(--wb-bad);
+}
+.kit-dot[data-tone="warn"] {
+  background: var(--wb-warn);
+  border-color: var(--wb-warn);
+}
+/* On a selected (accent) row every mark takes the row's text colour. */
+[aria-selected="true"] .kit-pill,
+[aria-current="true"] .kit-pill {
+  color: inherit;
+}
+
+/* ---- facts ----------------------------------------------------------------- */
+.kit-kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(84px, max-content) 1fr;
+  gap: 4px 12px;
+  line-height: 1.4;
+}
+.kit-kv[data-dense] {
+  gap: 1px 10px;
+}
+.kit-kv > div {
+  display: contents;
+}
+.kit-kv dt {
+  color: var(--wb-text-dim);
+}
+.kit-kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- tiles ----------------------------------------------------------------- */
+.kit-tile-button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-tile-button:hover {
+  background: var(--wb-hover);
+}
+
+/* ---- sections, empty states ------------------------------------------------- */
+.kit-section {
+  margin-bottom: 14px;
+}
+.kit-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--wb-grid);
+  font-size: var(--wb-font-size);
+  font-weight: 600;
+  color: var(--wb-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kit-section > h3 > span:not(:first-child),
+.kit-section > h3 .wb-button {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.kit-count {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.kit-empty p {
+  max-width: 46ch;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ---- commands, output ------------------------------------------------------- */
+.kit-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 2px 0;
+}
+.kit-command code {
+  padding: 1px 6px;
+  border: 1px solid var(--wb-grid);
+  background: var(--wb-canvas-alt);
+  font-family: var(--wb-mono);
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+.kit-code {
+  position: relative;
+}
+.kit-code pre {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--wb-grid);
+  background: var(--wb-canvas-alt);
+  font-family: var(--wb-mono);
+  font-size: 0.95em;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kit-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.kit-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--wb-warn);
+}
+
+/* ---- swatches (the colours are data) ---------------------------------------- */
+.kit-swatches {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+.kit-swatch {
+  display: inline-block;
+  border: 1px solid var(--wb-border);
+}
+
+/* ---- data grid --------------------------------------------------------------- */
+.kit-grid {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  background: var(--wb-canvas);
+  font-variant-numeric: tabular-nums;
+}
+.kit-grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  min-width: 100%;
+  background: var(--wb-face);
+  border-bottom: 1px solid var(--wb-border);
+}
+.kit-grid-row {
+  position: absolute;
+  left: 0;
+  display: flex;
+  min-width: 100%;
+  border-bottom: 1px solid var(--wb-grid);
+}
+.kit-grid-row:hover {
+  background: var(--wb-hover);
+}
+.kit-grid-row[aria-selected="true"] {
+  background: var(--wb-accent);
+  color: var(--wb-accent-text);
+}
+.kit-grid-cell {
+  flex: none;
+  box-sizing: border-box;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kit-grid-cell > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+span.kit-grid-cell {
+  display: block;
+  line-height: inherit;
+  align-content: center;
+}
+.kit-grid-row .kit-grid-cell {
+  line-height: 21px;
+}
+button.kit-grid-cell {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+button.kit-grid-cell:hover {
+  background: var(--wb-hover);
+}
+.kit-grid-cell[data-numeric] {
+  justify-content: flex-end;
+  text-align: right;
+}
+.kit-grid-cell[data-null] {
+  color: var(--wb-text-dim);
+}
+.kit-grid-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--wb-text-dim);
+}
+
+/* ---- agenda ------------------------------------------------------------------ */
+.kit-agenda-day {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 8px;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--wb-grid);
+  min-height: var(--wb-row-h);
+  align-items: start;
+}
+.kit-agenda-date {
+  color: var(--wb-text-dim);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+.kit-agenda-day[data-today] .kit-agenda-date {
+  color: var(--wb-text);
+  font-weight: 600;
+}
+.kit-agenda-day[data-preferred] {
+  box-shadow: inset 3px 0 0 var(--wb-accent);
+}
+.kit-agenda-day[data-overdue] .kit-agenda-date {
+  color: var(--wb-warn);
+  font-weight: 600;
+}
+.kit-agenda-day[data-empty]:not([data-preferred]):not([data-today]) {
+  opacity: 0.6;
+}
+.kit-agenda-items {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-agenda-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.kit-agenda-item:hover {
+  background: var(--wb-hover);
+}
+.kit-agenda-item[aria-current="true"] {
+  background: var(--wb-accent);
+  color: var(--wb-accent-text);
+}
+.kit-agenda-item[aria-current="true"] .wb-dim {
+  color: inherit;
+}
+.kit-agenda-item[data-tone="warn"] .wb-num {
+  color: var(--wb-warn);
+}
+.kit-agenda-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---- post preview -------------------------------------------------------------- */
+.kit-post {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--wb-border);
+  background: var(--wb-canvas);
+  color: var(--wb-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.43;
+}
+.kit-post header {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 4px;
+  align-items: center;
+}
+.kit-post-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--wb-accent);
+  color: var(--wb-accent-text);
+  font-weight: 600;
+}
+.kit-post-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+.kit-post-who strong {
+  font-size: 14px;
+}
+.kit-post-who span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kit-post-text {
+  padding: 4px 16px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kit-post-text:not([data-open]) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kit-post-more {
+  display: block;
+  margin: 0 16px 8px auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+.kit-post-more:hover {
+  color: var(--wb-accent);
+  text-decoration: underline;
+}
+.kit-post-media {
+  margin: 0;
+  border-top: 1px solid var(--wb-grid);
+  background: var(--wb-canvas-alt);
+}
+.kit-post-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.kit-post-media figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--wb-grid);
+  font-size: 12px;
+}
+.kit-post footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 16px 10px;
+  border-top: 1px solid var(--wb-grid);
+  font-size: 12px;
+}

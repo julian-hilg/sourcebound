@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sb:*)",
+      "Bash(.venv/bin/sb:*)",
+      "Bash(make:*)",
+      "Bash(latexmk:*)",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "deny": [
+      "Bash(sb unblock:*)",
+      "Bash(sb publish --push:*)",
+      "Bash(.venv/bin/sb unblock:*)",
+      "Bash(.venv/bin/sb publish --push:*)",
+      "Bash(make push:*)",
+      "Bash(gh repo create:*)",
+      "Read(./.env)"
+    ]
+  }
+}

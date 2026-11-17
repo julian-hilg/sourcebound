@@ -1,0 +1,24 @@
+# Working repository of one study (private). Data lives in the lake, never here.
+dist/
+*.parquet
+*.zst
+*.sqlite
+*.duckdb
+.env
+.venv/
+__pycache__/
+.DS_Store
+# LaTeX build files
+deliverables/**/*.aux
+deliverables/**/*.log
+deliverables/**/*.fls
+deliverables/**/*.fdb_latexmk
+deliverables/**/*.out
+deliverables/**/*.bbl
+deliverables/**/*.bcf
+deliverables/**/*.blg
+deliverables/**/*.run.xml
+deliverables/**/*.synctex.gz
+deliverables/**/*.toc
+deliverables/**/*.xmpi
+deliverables/*/main.pdf

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use Sourcebound, please cite the software."
+title: "Sourcebound: agent-orchestrated research and content with end-to-end provenance"
+type: software
+authors:
+  - family-names: Hilg
+    given-names: Julian
+repository-code: "https://github.com/julian-hilg/sourcebound"
+version: 0.1.0
+date-released: 2026-11-17
+license: MIT
+keywords:
+  - research software
+  - AI agents
+  - reproducibility
+  - provenance
+  - pre-registration

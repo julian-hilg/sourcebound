@@ -1,0 +1,41 @@
+% =============================================================================
+% Working paper of the example study.          Build: make paper   (or: sb sync && latexmk)
+%   This folder is self-contained (it compiles on its own and on Overleaf):
+%   main.tex, sections/   edited by people and agents
+%   generated/            numbers, tables, figures, diagrams -- written by `sb sync`, never by hand
+%   references.bib        written by `sb bib sync`;  *.cls, *.sty copied by `sb sync`
+%   numbers   \result{key}                          figures  \includegraphics{fig_name}
+%   tables    \input{generated/tables/<name>.tex}   diagrams \input{generated/tikz/<name>.tex}
+% =============================================================================
+\DocumentMetadata{lang=en-GB, pdfversion=1.7}
+\documentclass[cite=authoryear]{sbpaper}
+\usepackage{sbresults}
+\usepackage{sbtikz}
+\sbresults{generated/results.tex}
+\graphicspath{{generated/figures/}}
+
+\title{Example Study: Fat Tails in Daily EUR/USD Returns}
+\subtitle{Working Paper}
+\author{Your Name}
+\date{November 2026}
+\keywords{exchange rates; fat tails; kurtosis; risk management}
+\JEL{F31, G15, C12}
+
+\begin{document}
+\maketitle
+
+\input{sections/00_abstract}
+
+\input{sections/01_introduction}
+\input{sections/02_data}
+\input{sections/03_hypotheses_and_tests}
+\input{sections/04_results}
+\input{sections/05_conclusion}
+
+\printbibliography
+
+\clearpage
+\appendix
+\input{sections/90_data_appendix}
+
+\end{document}

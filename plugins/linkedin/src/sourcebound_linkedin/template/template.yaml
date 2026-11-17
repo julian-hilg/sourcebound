@@ -1,0 +1,11 @@
+# A slides template: one HTML page per deck, one PNG per slide, one carousel PDF.
+# The look comes from the design (colours, fonts, logo); this folder holds layout only.
+kind: slides
+title: Slides and infoposts (action title, exhibit, source line)
+for: [piece]
+width: 1080                # px; a deck may set its own (1080x1080, 1920x1080)
+height: 1350
+scale: 2                   # PNG pixels per CSS pixel
+html: slides.html.j2
+css: slides.css
+layout: layout.js          # places labels and measures the result; do not remove

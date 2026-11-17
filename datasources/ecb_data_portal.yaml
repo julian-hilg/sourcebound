@@ -1,0 +1,19 @@
+# Data source register entry (written by the data-scout agent, reviewed by a human).
+id: ecb_data_portal
+name: ECB Data Portal (SDMX REST API)
+url: https://data-api.ecb.europa.eu/
+publisher: European Central Bank
+access: api                 # api | download | scrape | licensed | manual | cooperation
+auth: none
+terms: https://www.ecb.europa.eu/home/disclaimer/html/index.en.html
+license: "Reuse permitted with source acknowledgement"
+robots: allows /service/data
+rate_limit: "own limit: 1 request / 6 s; one request per series batch"
+frequency: daily, about 16:00 CET on TARGET business days
+history: from 1999-01-04
+legal_notes: Public statistics; no personal data.
+cost: free
+status: active              # candidate | approved | active | paused | rejected
+tables: [market.ecb_fx_daily]
+contact: statistics@ecb.europa.eu
+checked: 2026-11-09

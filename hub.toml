@@ -1,0 +1,47 @@
+# Sourcebound hub configuration.  Paths may use ~ and {root} (= lake.root);
+# relative template paths are resolved against this folder.
+# Which file applies: SB_CONFIG -> nearest hub.toml above the working directory -> the user
+# configuration ~/.config/sourcebound/config.toml (`sb init`, same keys; for projects that
+# live outside this folder).  Data root: SB_LAKE_ROOT -> project.yaml `data_root:` -> lake.root.
+# Further overrides: SB_CATALOG, SB_DATA_PATH.  `sb doctor` prints what was resolved.
+
+[lake]
+# External storage: large data never lives inside a git repository.
+# Left out here on purpose: the data root (and the projects folder) then come from the user
+# configuration that `sb init --data-root PATH --projects-dir PATH` writes, so this checkout and
+# projects elsewhere use the same data. Without a user configuration it is ~/research-lake.
+# Set it only to give this hub a data root of its own.
+# root    = "~/research-lake"
+# DuckLake catalog: "sqlite:<file>" (one machine, several processes) or
+# "postgres:dbname=lake host=localhost user=lake" (web apps, several machines;
+# see compose.yaml and docs/data-access.md).
+catalog   = "sqlite:{root}/catalog.sqlite"
+# Parquet files of all tables: local folder or object storage ("s3://bucket/lake/").
+data_path = "{root}/data/"
+# Immutable raw responses (zstd), one folder per source.
+raw       = "{root}/raw"
+# Shared contracts and the source register (seeded by `sb init`); they win over the example
+# copies in this repository's contracts/ and datasources/.
+registry  = "{root}/registry"
+
+[fetch]
+# Honest identification: the tool's own name, never a browser string. No contact address needed.
+user_agent   = "sourcebound/0.1 (research)"
+min_interval = 6.0      # seconds between requests to the same host
+jitter       = 3.0      # + uniform random 0..jitter seconds
+respect_robots = true
+
+[zotero]
+url = "http://127.0.0.1:23119"          # Zotero 7+ with Better BibTeX, must be running
+collection_root = "research"            # one sub-collection per project
+
+[library]
+root = "{root}/library"                 # PDFs of papers (copied from Zotero) and their text
+# Optional PDF -> Markdown converter for `sb papers` (any command; formula-snip runs locally):
+# converter = "formula-snip convert {pdf} --out {out}"
+
+[github]
+owner = ""                              # your GitHub user or organisation
+
+[templates]
+project = "templates/project"

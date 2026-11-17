@@ -1,0 +1,15 @@
+% Research pipeline (flow diagram template). Include with \input{generated/tikz/pipeline.tex}
+\begin{tikzpicture}[sb, node distance=5mm and 11mm]
+  \node[sb box=17mm] (src) {Sources\\[-1pt]{\footnotesize API, web, files}};
+  \node[sb store, right=of src] (raw) {Raw\\[-1pt]{\footnotesize immutable}};
+  \node[sb store, right=of raw] (lake) {Lake\\[-1pt]{\footnotesize contracts}};
+  \node[sb box=17mm, right=of lake] (ana) {Analysis\\[-1pt]{\footnotesize per hypothesis}};
+  \node[sb doc=15mm, right=of ana] (doc) {Paper\\[-1pt]{\footnotesize PDF}};
+  \draw[sb arrow] (src) -- node[sb label, above] {fetch} (raw);
+  \draw[sb arrow] (raw) -- node[sb label, above] {parse} (lake);
+  \draw[sb arrow] (lake) -- node[sb label, above] {read} (ana);
+  \draw[sb arrow] (ana) -- node[sb label, above] {results} (doc);
+  \node[sb box=40mm, below=8mm of $(src)!0.5!(raw)$] (hyp) {Hypotheses (frozen)};
+  \draw[sb arrow, sb dashed] (hyp.east) -| (ana.south);
+  \node[sb label, below=1mm of lake] {\texttt{sha256} lineage};
+\end{tikzpicture}

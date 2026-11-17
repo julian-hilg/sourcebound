@@ -1,0 +1,54 @@
+# Pre-registered hypotheses (Gate G2). Owned by the lead.
+# Write them BEFORE looking at the outcome data; `sb freeze` stores date, commit and a hash of
+# every hypothesis, and `sb check` reports any later change (status and results may change).
+# A justified change: add `- {date: YYYY-MM-DD, hypothesis: H2, reason: ...}` under
+# `amendments:`, then `sb freeze --amend`. A hypothesis added after the freeze is tested only
+# with `exploratory: true` or after such an amendment.
+#
+# Fields
+#   id             H1, H2, ...
+#   statement      the claim about the world
+#   motivated_by   claim ids from evidence/claims.yaml
+#   prediction     what we expect to observe if the statement is true
+#   test           method, sample, specification (precise enough to re-implement)
+#   data           lake tables (schema.table)
+#   metric         the number that decides
+#   decision_rule  fixed rule: when supported / refuted / inconclusive
+#   kill           what would make the whole line of work pointless
+#   priority       1 (must) .. 3 (nice)
+#   status         proposed | frozen | running | supported | refuted | inconclusive | dropped
+#   results        R: keys recorded by the analysis (filled after the test)
+frozen:
+  date: '2026-11-09'
+  git: null
+amendments: []
+hypotheses:
+- id: H1
+  statement: Daily EUR/USD log returns are fat-tailed.
+  motivated_by: [C001]
+  prediction: Excess kurtosis of daily log returns is clearly above zero.
+  test: >-
+    Daily log returns of the ECB EUR/USD reference rate, full sample. Sample excess
+    kurtosis with a 95 % percentile bootstrap interval (moving blocks of 20 days,
+    2,000 replications, seed 1).
+  data: [market.ecb_fx_daily]
+  metric: excess kurtosis (lower bound of the 95 % interval)
+  decision_rule: supported if the lower bound > 0; refuted if the upper bound < 0; else inconclusive
+  kill: none (descriptive)
+  priority: 1
+  status: supported
+  results: [R:h1.kurtosis, R:h1.kurtosis_lo, R:h1.kurtosis_hi]
+- id: H2
+  statement: A normal model understates the frequency of large daily moves.
+  motivated_by: [C001, C003]
+  prediction: Days with |z| > 3 occur more often than the normal probability 0.27 %.
+  test: >-
+    Standardise returns by the full-sample mean and standard deviation; count days with
+    |z| > 3; one-sided exact binomial test against p = 0.0027.
+  data: [market.ecb_fx_daily]
+  metric: ratio of observed to normal frequency of |z| > 3
+  decision_rule: supported if p-value < 0.01 and ratio > 1; refuted if ratio <= 1
+  kill: none
+  priority: 1
+  status: supported
+  results: [R:h2.ratio, R:h2.share, R:h2.pvalue]

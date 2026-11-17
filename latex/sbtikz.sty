@@ -1,0 +1,46 @@
+%% sbtikz.sty -- TikZ diagrams in the house style: black, 0.4pt rules, square
+%% corners, text in the document font (diagrams are \input, not included as PDFs).
+%%
+%%   \usepackage{sbtikz}
+%%   \begin{tikzpicture}[sb]
+%%     \node[sb box] (a) {Raw}; \node[sb box, right=of a] (b) {Staged};
+%%     \draw[sb arrow] (a) -- (b);
+%%   \end{tikzpicture}
+%%
+%% Styles
+%%   sb              picture defaults (line width, arrow tips, node distance, font)
+%%   sb box=<width>  process step (rectangle)          sb store   data store (cylinder)
+%%   sb doc          document / deliverable            sb decision  diamond
+%%   sb var          variable in a causal DAG (circle) sb latent  unobserved variable (dashed)
+%%   sb group        dashed frame around nodes (fit)   sb label   small caption text
+%%   sb arrow        ->     sb dashed  dashed line     sb brace   curly brace
+%%   sb axis         time axis with arrow              sb tick    tick on a time axis
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{sbtikz}[2026/11/09 v1.0 Sourcebound -- TikZ house style]
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc, fit, backgrounds, shapes.geometric,
+  shapes.misc, decorations.pathreplacing, matrix}
+
+\tikzset{
+  sb/.style={line width=0.4pt, draw=black, text=black, font=\small,
+    >={Latex[length=4pt, width=3pt]}, node distance=5mm and 9mm},
+  sb box/.style={draw, rectangle, sharp corners, align=center, inner sep=3pt,
+    minimum height=8mm, text width=#1},
+  sb box/.default=22mm,
+  sb store/.style={draw, cylinder, shape border rotate=90, aspect=0.18, align=center,
+    minimum height=10mm, text width=#1, inner sep=2pt},
+  sb store/.default=18mm,
+  sb doc/.style={sb box=#1, double, double distance=1.2pt},
+  sb doc/.default=22mm,
+  sb decision/.style={draw, diamond, aspect=2, align=center, inner sep=1pt, font=\footnotesize},
+  sb var/.style={draw, circle, minimum size=9mm, inner sep=1pt, align=center},
+  sb latent/.style={sb var, dash pattern=on 2pt off 1.5pt},
+  sb group/.style={draw, dash pattern=on 2pt off 1.5pt, inner sep=4pt},
+  sb label/.style={font=\footnotesize, align=center, inner sep=1pt},
+  sb arrow/.style={->},
+  sb dashed/.style={dash pattern=on 2pt off 1.5pt},
+  sb brace/.style={decorate, decoration={brace, amplitude=4pt, raise=2pt}},
+  sb axis/.style={->},
+  sb tick/.style={draw, line width=0.4pt},
+}
+\endinput

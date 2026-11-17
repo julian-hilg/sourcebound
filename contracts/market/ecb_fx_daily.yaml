@@ -1,0 +1,18 @@
+name: market.ecb_fx_daily
+title: ECB euro foreign exchange reference rates (daily)
+description: >
+  Daily euro reference exchange rates published by the ECB at around 16:00 CET on
+  every working day except TARGET closing days (concertation around 14:10 CET).
+  One row per publication day and quote currency.
+owner: hub
+grain: one row per date and currency
+primary_key: [date, currency]
+license: "ECB: reuse permitted with source acknowledgement"
+sources: [ecb_data_portal]
+pipeline: pipelines/ecb_fx
+columns:
+  date:     {type: date, description: Reference date}
+  currency: {type: string, description: ISO 4217 quote currency, pattern: "^[A-Z]{3}$"}
+  rate:     {type: double, description: Units of currency per 1 EUR, unit: CUR/EUR, min: 0}
+  obs_status: {type: string, description: "SDMX observation status (A = normal)"}
+  raw_ref:  {type: string, description: sha256 of the archived API response, nullable: false}

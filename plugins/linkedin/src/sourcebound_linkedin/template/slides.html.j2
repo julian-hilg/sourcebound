@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="{{ deck.lang }}">
+<head>
+<meta charset="utf-8">
+<title>{{ deck.title }}</title>
+<style>
+{{ tokens_css }}
+{{ css }}
+</style>
+</head>
+<body>
+{#- One macro per block type. Values arrive resolved: numbers filled in, sources as text. -#}
+{%- macro exhibit(b) -%}
+{%- if b.name %}<div class="exhibit"><span class="name">{{ b.name }}</span>{% if b.unit %}<span class="unit">, {{ b.unit }}</span>{% endif %}</div>{% endif -%}
+{%- endmacro -%}
+
+{%- macro block(b) -%}
+<div class="block{{ ' grow' if b.grow }}{{ ' push' if b.push }}" data-block="{{ b.type }}">
+{{ exhibit(b) }}
+{%- if b.type == "kpis" %}
+  <div class="kpis" style="grid-template-columns:repeat({{ b['items']|length }},1fr)">
+  {%- for k in b['items'] %}<div class="kpi"><div class="n" data-fit>{{ k.n }}</div><div class="t">{{ k.t }}</div></div>{% endfor %}
+  </div>
+{%- elif b.type == "bars" %}
+  <div class="bars"{% if b.label_width %} style="--lw:{{ b.label_width }}px" data-fixed{% endif %}>
+  {%- for g in b.groups %}
+  <div class="grp">{% if g.label %}<div class="gl">{{ g.label }}</div>{% endif %}
+    {%- for r in g.rows %}
+    <div class="row{{ ' hi' if r.hi }}"><div class="l">{{ r.label }}</div>
+      <div class="track"><div class="bar" data-mark style="width:{{ r.pct }}%"></div><div class="v" data-label>{{ r.text }}</div></div></div>
+    {%- endfor %}
+  </div>
+  {%- endfor %}
+  </div>
+{%- elif b.type == "columns" %}
+  <div class="colchart" style="height:{{ b.height }}px">
+  {%- for c in b['items'] %}
+    <div class="col{{ ' hi' if c.hi }}"><div class="v" data-label>{{ c.text }}</div><div class="bar" data-mark style="height:{{ c.pct }}%"></div></div>
+  {%- endfor %}
+  </div>
+  <div class="collabels">{% for c in b['items'] %}<div data-label>{{ c.label }}</div>{% endfor %}</div>
+{%- elif b.type == "line" %}
+  <div class="linechart" style="height:{{ b.height }}px;--gutter:{{ b.gutter }}px">
+    <div class="plot">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+        {%- for ref in b.refs %}<line class="ref" x1="0" x2="100" y1="{{ ref.y }}" y2="{{ ref.y }}"/>{% endfor %}
+        {%- for s in b.series %}<polyline class="{{ 'hi' if s.hi else ('s' ~ s.n if s.n else '') }}" points="{{ s.points }}"/>{% endfor %}
+      </svg>
+      {%- for ref in b.refs %}<div class="yt" data-label style="top:{{ ref.y }}%">{{ ref.label }}</div>{% endfor %}
+    </div>
+    {%- for s in b.series %}<div class="end{{ ' hi' if s.hi }}" data-label data-y="{{ s.end_y }}" style="top:calc(({{ b.height }}px - 44px) * {{ s.end_y / 100 }})">{{ s.label }}{% if s.end_text %} <b>{{ s.end_text }}</b>{% endif %}</div>{% endfor %}
+    {%- for t in b.xticks %}<div class="xt{{ ' first' if t.first }}{{ ' last' if t.last }}" data-label data-xt style="left:calc((100% - {{ b.gutter }}px) * {{ t.x / 100 }})">{{ t.label }}</div>{% endfor %}
+  </div>
+{%- elif b.type == "gantt" %}
+  <div class="gantt">
+    <div class="head" style="grid-template-columns:{{ b.label_width }}px repeat({{ b.ticks|length }},1fr)"><div>{{ b.corner }}</div>{% for t in b.ticks %}<div>{{ t }}</div>{% endfor %}</div>
+    {%- for r in b.rows %}
+    <div class="r" style="grid-template-columns:{{ b.label_width }}px repeat({{ b.ticks|length }},1fr)"><div class="l">{{ r.label }}{% if r.sub %}<small>{{ r.sub }}</small>{% endif %}</div>
+      <div class="seg{{ ' hi' if r.hi }}" data-mark style="grid-column:{{ r.start + 2 }} / span {{ r.span }}"></div>
+      {%- if r.ext %}<div class="seg ext" style="grid-column:{{ r.start + 2 + r.span }} / span {{ r.ext }}"></div>{% endif %}
+    </div>
+    {%- endfor %}
+  </div>
+{%- elif b.type == "day" %}
+  <div class="day"><div class="axis"></div>
+  {%- for e in b.events %}
+    <div class="ev{{ ' acc' if e.accent }}" style="left:{{ e.pos }}%"><div class="dot"></div>
+      <div class="lab{{ ' below' if e.below }}{{ ' right' if e.align == 'right' }}" data-label{% if e.align %} data-align-set{% endif %}><div class="time">{{ e.time }}</div><div class="what">{{ e.what }}</div></div></div>
+  {%- endfor %}
+  </div>
+{%- elif b.type == "windows" %}
+  <div class="win"{% if b.label_width %} style="--lw:{{ b.label_width }}px"{% endif %}>
+    <div class="wh"><div></div><div class="wt">{% for m in b.months %}<span style="left:{{ loop.index0 * b.step }}%;width:{{ b.step }}%">{{ m }}</span>{% endfor %}</div></div>
+    {%- for w in b.windows %}
+    <div class="wr"><div class="wl">{{ w.label }}</div>
+      <div class="wt">{% for m in b.months %}<i style="left:{{ loop.index0 * b.step }}%"></i>{% endfor %}<i style="left:100%"></i>
+        <div class="w" data-mark style="left:{{ w.start }}%;width:{{ w.width }}%"></div>
+        {%- if w.dates %}<div class="wd" data-label data-after="{{ w.start + w.width }}" data-before="{{ w.start }}" style="left:calc({{ w.start + w.width }}% + 12px)">{{ w.dates }}</div>{% endif %}
+      </div></div>
+    {%- endfor %}
+  </div>
+{%- elif b.type == "table" %}
+  <table>
+    {%- if b.columns %}<thead><tr>{% for c in b.columns %}<th{{ ' class="num"'|safe if loop.index0 in b.numeric }}>{{ c }}</th>{% endfor %}</tr></thead>{% endif %}
+    <tbody>
+    {%- for row in b.rows %}<tr{{ ' class="hl"'|safe if loop.index0 in b.highlight }}>{% for c in row %}<td class="{{ 'k' if loop.first and b.key }}{{ ' num' if loop.index0 in b.numeric }}">{{ c }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table>
+{%- elif b.type == "bullets" %}
+  <ul class="sq">{% for i in b['items'] %}<li>{{ i }}</li>{% endfor %}</ul>
+{%- elif b.type == "text" %}
+  <div class="text">{% for p in b.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+{%- elif b.type == "comments" %}
+  <div class="comments" style="grid-template-columns:repeat({{ b['items']|length }},1fr)">
+  {%- for c in b['items'] %}<div class="cm">{% if c.head %}<div class="ch">{{ c.head }}</div>{% endif %}<p>{{ c.text }}</p></div>{% endfor %}
+  </div>
+{%- elif b.type == "callout" %}
+  <div class="callout"><div class="n">{{ b.n }}</div><p>{{ b.text }}</p></div>
+{%- elif b.type == "quote" %}
+  <div class="quote"><div class="q">{{ b.text }}</div>{% if b.by %}<div class="by">{{ b.by }}</div>{% endif %}</div>
+{%- elif b.type == "sources" %}
+  <ol class="src">{% for s in b['items'] %}<li><div>{{ s.text }}{% if s.where %}<span>{{ s.where }}</span>{% endif %}</div></li>{% endfor %}</ol>
+{%- endif %}
+</div>
+{%- endmacro -%}
+
+{%- macro brand(cls="") -%}
+{%- if logo %}<img src="{{ logo }}" alt="{{ design_name }}">{% elif design_name %}<span class="wordmark">{{ design_name }}</span>{% endif -%}
+{%- endmacro -%}
+
+{% for s in slides %}
+{%- if s.layout == "cover" %}
+<section class="slide cover" id="s{{ loop.index }}" data-slide="{{ loop.index }}">
+  <div class="eyebrow">{{ s.eyebrow }}</div>
+  <h1 class="title-cover">{{ s.title }}</h1>
+  {% if s.sub %}<div class="sub">{{ s.sub }}</div>{% endif %}
+  <div class="rule"></div>
+  <div class="spacer"></div>
+  <div class="bottom">
+    <div class="note">{{ s.note }}</div>
+    {% if logo_inverse %}<img src="{{ logo_inverse }}"{% if logo_needs_invert %} class="inv"{% endif %} alt="{{ design_name }}">{% elif design_name %}<span class="wordmark">{{ design_name }}</span>{% endif %}
+  </div>
+</section>
+{%- else %}
+<section class="slide" id="s{{ loop.index }}" data-slide="{{ loop.index }}">
+  <div class="tracker">{{ deck.tracker }}</div>
+  <h2 class="title">{{ s.title }}</h2>
+  <div class="rule"></div>
+  <div class="body">
+  {%- for b in s.blocks %}
+{{ block(b) }}
+  {%- endfor %}
+  </div>
+  <div class="foot">
+    <div class="meta">{% if s.note %}<span class="note">{{ s.note }}</span><br>{% endif %}{% if s.source %}<span class="src">{{ source_prefix }}{{ s.source }}</span>{% endif %}</div>
+    <div class="brand">{{ brand() }}<span class="pg">{{ loop.index }}</span></div>
+  </div>
+</section>
+{%- endif %}
+{% endfor %}
+<script type="application/json" id="sb-config">{{ config_json }}</script>
+<script type="application/json" id="sb-report"></script>
+<script>
+{{ layout_js }}
+</script>
+</body>
+</html>

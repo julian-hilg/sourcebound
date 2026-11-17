@@ -1,0 +1,17 @@
+# Optional: Postgres as DuckLake catalog (several machines, webapps) and as serving
+# database for apps. Start with `make db-up`, then set in hub.toml:
+#   catalog = "postgres:dbname=lake host=localhost port=5433 user=lake password=lake"
+# The Parquet files stay where data_path points (local folder or R2).
+services:
+  lake-db:
+    image: postgres:17
+    container_name: sb-lake-db
+    environment:
+      POSTGRES_USER: lake
+      POSTGRES_PASSWORD: lake
+      POSTGRES_DB: lake
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["lake-db:/var/lib/postgresql/data"]
+    restart: unless-stopped
+volumes:
+  lake-db: {}

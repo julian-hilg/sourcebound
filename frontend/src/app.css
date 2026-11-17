@@ -1,0 +1,693 @@
+/*
+ * The app's own styles, prefix sb-. Colours come from the framework's --wb-* tokens only,
+ * so every theme works; nothing here restyles a wb-* class.
+ */
+
+/* ---- panel scaffolding ---------------------------------------------------- */
+.sb-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sb-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.sb-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sb-split > .sb-scroll {
+  flex: 3;
+}
+.sb-detail {
+  flex: 2;
+  min-height: 90px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-top: 1px solid var(--wb-border);
+  background: var(--wb-canvas-alt);
+}
+.sb-detail p {
+  margin: 0 0 6px;
+}
+.sb-grow {
+  flex: 1;
+}
+.sb-pad {
+  padding: 8px 10px;
+}
+.sb-blank {
+  max-width: 44ch;
+  text-align: center;
+  line-height: 1.5;
+}
+.sb-blank .wb-button {
+  margin-top: 8px;
+}
+.sb-search {
+  max-width: 180px;
+}
+.sb-area {
+  min-height: 92px;
+  resize: vertical;
+  padding: 4px 6px;
+  line-height: 1.4;
+}
+
+/* ---- tables: text columns wrap, the rest stays on one line ----------------- */
+.sb-table td,
+.sb-table th {
+  text-align: left;
+  vertical-align: top;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  height: auto;
+}
+.sb-table td.wb-num {
+  text-align: right;
+}
+.sb-table td.sb-wrap {
+  white-space: normal;
+  min-width: 22ch;
+  line-height: 1.35;
+}
+.sb-table tr[tabindex] {
+  cursor: pointer;
+}
+.sb-url {
+  overflow-wrap: anywhere;
+}
+.sb-table code,
+.sb-detail code,
+.sb-pad code {
+  font-family: var(--wb-mono);
+  font-size: 0.95em;
+}
+
+/* ---- status words ---------------------------------------------------------- */
+.sb-status {
+  white-space: nowrap;
+}
+.sb-status[data-tone="good"] {
+  color: var(--wb-good);
+}
+.sb-status[data-tone="bad"] {
+  color: var(--wb-bad);
+}
+.sb-status[data-tone="warn"] {
+  color: var(--wb-warn);
+}
+/* A selected row is drawn on the accent colour: its words take the row's text colour. */
+tr[aria-selected="true"] .sb-status,
+tr[aria-selected="true"] .sb-gate,
+tr[aria-selected="true"] .wb-dim,
+tr[aria-selected="true"] .wb-warn {
+  color: inherit;
+}
+.sb-gate {
+  margin-right: 8px;
+  color: var(--wb-text-dim);
+  white-space: nowrap;
+}
+.sb-gate[data-passed="true"] {
+  color: var(--wb-good);
+}
+.sb-notice {
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--wb-grid);
+  line-height: 1.4;
+}
+.sb-pad > .sb-notice {
+  padding-left: 0;
+  padding-right: 0;
+}
+.sb-notice[data-tone="warn"] {
+  color: var(--wb-warn);
+}
+.sb-notice[data-tone="bad"] {
+  color: var(--wb-bad);
+}
+
+/* ---- project card ---------------------------------------------------------- */
+.sb-title {
+  margin: 0 0 2px;
+  font-size: calc(var(--wb-font-size) + 3px);
+  line-height: 1.3;
+}
+.sb-path {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.sb-heading {
+  margin: 14px 0 4px;
+  font-size: var(--wb-font-size);
+  color: var(--wb-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sb-phases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+.sb-phases li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border-left: 3px solid var(--wb-grid);
+  color: var(--wb-text-dim);
+}
+.sb-phases li[data-state="done"] {
+  border-left-color: var(--wb-good);
+  color: var(--wb-text);
+}
+.sb-phases li[data-state="current"] {
+  border-left-color: var(--wb-accent);
+  color: var(--wb-text);
+  font-weight: 600;
+}
+.sb-phases .sb-gate {
+  margin: 0;
+  font-weight: 400;
+}
+.sb-facts {
+  display: grid;
+  grid-template-columns: minmax(84px, max-content) 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  line-height: 1.4;
+}
+.sb-facts dt {
+  color: var(--wb-text-dim);
+}
+.sb-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sb-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sb-log li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--wb-grid);
+  line-height: 1.4;
+}
+
+/* ---- hypotheses ------------------------------------------------------------ */
+.sb-card {
+  border-bottom: 1px solid var(--wb-grid);
+}
+.sb-card[data-selected="true"] {
+  box-shadow: inset 3px 0 0 var(--wb-accent);
+}
+.sb-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.sb-card-head:hover {
+  background: var(--wb-hover);
+}
+.sb-card-text {
+  flex: 1 1 100%;
+}
+.sb-card-body {
+  padding: 2px 10px 10px;
+}
+.sb-ref {
+  display: inline-block;
+  margin: 0 8px 2px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-accent);
+  font: inherit;
+  font-family: var(--wb-mono);
+  font-size: 0.95em;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sb-ref:hover {
+  text-decoration: underline;
+}
+
+/* ---- claim evidence -------------------------------------------------------- */
+.sb-evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sb-evidence li {
+  padding: 5px 0;
+  border-top: 1px solid var(--wb-grid);
+  line-height: 1.4;
+}
+.sb-evidence blockquote {
+  margin: 3px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--wb-border);
+  color: var(--wb-text-dim);
+}
+.sb-detail a,
+.sb-doc a {
+  color: var(--wb-accent);
+}
+
+/* ---- documents and command output ------------------------------------------ */
+.sb-doc {
+  max-width: 78ch;
+  margin: 0 auto;
+  padding: 14px 18px 28px;
+  line-height: 1.55;
+}
+.sb-output {
+  margin: 0;
+  font-family: var(--wb-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+/* ---- the deliverable reader: a page close to the LaTeX house style ---------- */
+.sb-desk {
+  background: var(--wb-canvas-alt);
+  padding: 18px 12px 40px;
+}
+.sb-paper {
+  box-sizing: border-box;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3.2rem clamp(1.2rem, 7%, 4.2rem) 3.6rem;
+  background: var(--wb-canvas);
+  color: var(--wb-text);
+  border: 1px solid var(--wb-grid);
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+}
+.sb-paper[data-width="narrow"] {
+  max-width: 38rem;
+}
+.sb-paper[data-width="wide"] {
+  max-width: 58rem;
+}
+.sb-paper[data-font="serif"] {
+  font-family: "Latin Modern Roman", "TeX Gyre Termes", "Times New Roman", Times, "Nimbus Roman", serif;
+}
+.sb-paper[data-font="sans"] {
+  font-family: var(--wb-font);
+}
+.sb-paper header {
+  text-align: center;
+  margin-bottom: 2rem;
+  hyphens: manual;
+}
+.sb-paper h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.62rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.sb-subtitle {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.sb-byline {
+  margin: 0.6rem 0 0;
+}
+/* House style: no paragraph indent, space between paragraphs. */
+.sb-paper p {
+  margin: 0 0 0.62em;
+  text-indent: 0;
+}
+.sb-paper h2,
+.sb-paper h3,
+.sb-paper h4 {
+  margin: 1.5em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  hyphens: manual;
+}
+.sb-paper h2 {
+  font-size: 1.24rem;
+}
+.sb-paper h3 {
+  font-size: 1.08rem;
+}
+.sb-paper h4 {
+  font-size: 1rem;
+  font-style: italic;
+  font-weight: 400;
+}
+.sb-secno {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 0.5em;
+  font-variant-numeric: lining-nums;
+}
+.sb-abstract {
+  margin: 0 7% 1.8rem;
+  font-size: 0.93em;
+}
+.sb-abstract-title {
+  text-align: center;
+  font-weight: 600;
+}
+.sb-paper ul,
+.sb-paper ol {
+  margin: 0 0 0.62em;
+  padding-left: 1.5em;
+}
+.sb-paper li {
+  margin-bottom: 0.25em;
+}
+/* Blue citations and links, as in the PDF; everything else is the text colour. */
+.sb-paper a {
+  color: var(--wb-accent);
+  text-decoration: none;
+}
+.sb-paper a:hover {
+  text-decoration: underline;
+}
+.sb-paper code {
+  font-family: var(--wb-mono);
+  font-size: 0.86em;
+  hyphens: none;
+}
+.sb-paper pre {
+  margin: 0.8em 0;
+  padding: 0.5em 0;
+  border-top: 1px solid var(--wb-text);
+  border-bottom: 1px solid var(--wb-text);
+  overflow-x: auto;
+  text-align: left;
+  line-height: 1.35;
+}
+.sb-paper pre code {
+  font-size: 0.78em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sb-paper figure {
+  margin: 1.5em 0;
+  text-align: center;
+}
+.sb-paper figure img {
+  max-width: 100%;
+  height: auto;
+}
+.sb-paper figcaption {
+  margin: 0.5em 4% 0;
+  font-size: 0.9em;
+  text-align: left;
+  hyphens: manual;
+}
+.sb-float-table figcaption {
+  margin: 0 0 0.5em;
+}
+/* Tables in the booktabs manner: rules above, below and under the header only. */
+.sb-paper table {
+  width: 100%;
+  margin: 0 auto;
+  border-collapse: collapse;
+  border-top: 1.5px solid var(--wb-text);
+  border-bottom: 1.5px solid var(--wb-text);
+  font-size: 0.88em;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: left;
+  hyphens: manual;
+  line-height: 1.35;
+}
+.sb-paper th {
+  font-weight: 400;
+  border-bottom: 0.8px solid var(--wb-text);
+}
+.sb-paper th,
+.sb-paper td {
+  padding: 0.26em 0.6em;
+  vertical-align: top;
+}
+.sb-paper th:first-child,
+.sb-paper td:first-child {
+  padding-left: 0;
+}
+.sb-paper th:last-child,
+.sb-paper td:last-child {
+  padding-right: 0;
+}
+.sb-paper [data-right] {
+  text-align: right;
+  white-space: nowrap;
+}
+.sb-tablenote {
+  margin: 0.4em 0 0;
+  font-size: 0.82em;
+  text-align: left;
+}
+.sb-missing {
+  color: var(--wb-bad);
+  text-align: left;
+}
+/* A recorded number: a button that looks like text. */
+.sb-number {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sb-paper[data-mark] .sb-number {
+  text-decoration: underline dotted var(--wb-text-dim);
+  text-underline-offset: 0.18em;
+}
+.sb-number:hover,
+.sb-number[data-selected] {
+  background: color-mix(in oklab, var(--wb-accent) 22%, transparent);
+}
+.sb-number[data-missing] {
+  color: var(--wb-bad);
+}
+.sb-edited {
+  margin: 1.2em 0 -0.6em;
+  font-family: var(--wb-font);
+  font-size: 12px;
+  color: var(--wb-warn);
+  text-align: left;
+}
+.sb-references p {
+  padding-left: 1.5em;
+  text-indent: -1.5em;
+  text-align: left;
+  font-size: 0.93em;
+  overflow-wrap: anywhere;
+}
+.sb-footnotes {
+  margin-top: 2em;
+  padding-top: 0.6em;
+  border-top: 0.8px solid var(--wb-text);
+  font-size: 0.86em;
+}
+.sb-paper .katex {
+  font-size: 1.04em;
+}
+.sb-paper .katex-display {
+  margin: 0.9em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* A stat tile's caption: one line, cut with an ellipsis (the full text is in its tooltip). */
+.sb-kpi-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-split > form.sb-detail {
+  flex: 5;
+}
+
+/* ---- row height (Settings → Tables) ----------------------------------------- */
+:root[data-sb-density="comfortable"] .sb-table td,
+:root[data-sb-density="comfortable"] .sb-table th {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+:root[data-sb-density="comfortable"] .sb-list-row {
+  min-height: calc(var(--wb-row-h) + 8px);
+}
+
+/* ---- lists beside a detail (lake tables, connections, jobs) ------------------- */
+.sb-list-heading {
+  padding: 6px 8px 2px;
+  color: var(--wb-text-dim);
+  font-size: calc(var(--wb-font-size) - 1px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sb-list-row {
+  padding: 0 8px;
+  border-radius: 0;
+}
+.sb-list-row[aria-current="true"] {
+  background: var(--wb-accent);
+  color: var(--wb-accent-text);
+}
+.sb-list-row[aria-current="true"] .wb-dim {
+  color: inherit;
+}
+.sb-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sb-detail-head {
+  border-bottom: 1px solid var(--wb-grid);
+  line-height: 1.4;
+}
+.sb-detail-head p {
+  margin: 0 0 4px;
+}
+.sb-inline {
+  display: inline-block;
+  margin-right: 12px;
+}
+.sb-pad a {
+  color: var(--wb-accent);
+}
+input.sb-grow {
+  min-width: 0;
+}
+
+/* ---- SQL console (after the Werkbank starter's) -------------------------------- */
+.sb-sql-top {
+  flex: 0 0 34%;
+  min-height: 84px;
+  display: flex;
+  border-bottom: 1px solid var(--wb-border);
+}
+.sb-sql-editor,
+.sb-editor {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: var(--wb-canvas);
+  color: var(--wb-text);
+  font-family: var(--wb-mono);
+  font-size: var(--wb-font-size);
+  line-height: 1.5;
+  tab-size: 2;
+}
+.sb-sql-editor:focus-visible,
+.sb-editor:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--wb-accent);
+}
+.sb-sql-schema {
+  flex: 0 0 200px;
+  max-width: 40%;
+  overflow: auto;
+  padding: 4px 6px;
+  border-left: 1px solid var(--wb-grid);
+  background: var(--wb-canvas-alt);
+}
+.sb-sql-schema summary {
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--wb-mono);
+  font-size: 0.95em;
+}
+.sb-sql-schema ul {
+  margin: 0 0 4px;
+  padding-left: 22px;
+  list-style: none;
+  white-space: nowrap;
+}
+.sb-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 2px 10px;
+  min-height: var(--wb-row-h);
+  background: var(--wb-canvas-alt);
+  border-bottom: 1px solid var(--wb-grid);
+  color: var(--wb-text-dim);
+}
+.sb-sql-result {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---- a piece: the text editor, checks, rendered files -------------------------- */
+.sb-editor {
+  flex: 1 1 auto;
+  min-height: 120px;
+  font-family: var(--wb-font);
+  font-size: calc(var(--wb-font-size) + 1px);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.sb-panel > .sb-readout {
+  border-top: 1px solid var(--wb-grid);
+  border-bottom: 0;
+}
+.sb-checks {
+  max-height: 34%;
+  overflow: auto;
+  border-top: 1px solid var(--wb-border);
+}
+.sb-when {
+  width: 17ch;
+  font-variant-numeric: tabular-nums;
+}
+.sb-files {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+.sb-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sb-thumbs img {
+  display: block;
+  width: 132px;
+  height: auto;
+  border: 1px solid var(--wb-border);
+}

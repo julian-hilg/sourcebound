@@ -1,0 +1,10 @@
+# Web sources outside Zotero. Add with `sb snap URL --title ...` (archives the page).
+sources:
+- id: W-0001
+  title: Euro foreign exchange reference rates
+  url: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html
+  publisher: European Central Bank
+  accessed: '2026-11-09T08:57:37+00:00'
+  sha256: 0608eacd19fb63354a530528c9e3cd51702caf5aef9e1f6e8e0c23a751a99616
+  raw: web/2026/11/09/0608eacd19fb63354a53.html.zst
+  note: ''

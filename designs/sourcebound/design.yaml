@@ -1,0 +1,7 @@
+# The neutral default design. Copy it to start an organisation's own (`sb design new ID --name "..."`),
+# or keep a design in a pack outside this checkout (`sb pack install FOLDER`).
+# Every key is optional here: what is left out comes from the built-in defaults (`sb design show`).
+name: Sourcebound
+colors:
+  primary: "#1f3a5f"
+  accent: "#0b84c6"

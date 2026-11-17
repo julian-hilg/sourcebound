@@ -1,0 +1,7 @@
+# Plain latexmk settings: this folder compiles on its own and on Overleaf.
+# `make paper` in the project runs `sb sync` first and copies main.pdf to ../<slug>.pdf
+$pdf_mode   = 1;
+$bibtex_use = 2;
+$pdflatex   = 'pdflatex -interaction=nonstopmode -file-line-error -synctex=1 %O %S';
+$clean_ext  = 'bbl bcf run.xml synctex.gz xmpi';
+@default_files = ('main.tex');

@@ -1,0 +1,22 @@
+\section{Results}\label{sec:results}
+
+The excess kurtosis is \result{h1.kurtosis} with a 95\,\% interval from
+\result{h1.kurtosis_lo} to \result{h1.kurtosis_hi}; H1 is supported. Large moves are
+frequent: \result{h2.count} days exceed three standard deviations, a share of
+\result{h2.share} against \result{h2.share_normal} under normality ($p =
+\result{h2.pvalue}$); H2 is supported. \Cref{fig:tails} shows that the gap widens
+further out in the tail, and \cref{tab:tails} gives the counts.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics{fig_tails}
+  \caption{Left: density of standardised daily returns against the normal density.
+  Right: share of days beyond a threshold (log scale).}\label{fig:tails}
+\end{figure}
+
+\begin{table}[t]
+  \caption{Frequency of large daily moves}\label{tab:tails}
+  \centering
+  \input{generated/tables/h2_tails.tex}
+  \tablenote{Returns standardised with the full-sample mean and standard deviation.}
+\end{table}

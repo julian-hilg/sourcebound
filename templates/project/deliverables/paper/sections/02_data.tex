@@ -1,0 +1,14 @@
+\section{Data}\label{sec:data}
+
+The ECB publishes euro reference exchange rates on every working day except TARGET
+closing days \parencite{W-0001}.
+The sample covers \result{data.n_days} daily log returns; their standard deviation is
+\result{data.vol_daily} per day. \Cref{tab:summary} summarises the distribution;
+\cref{app:lineage} lists the exact data versions.
+
+\begin{table}[t]
+  \caption{Daily EUR/USD log returns: summary statistics}\label{tab:summary}
+  \centering
+  \input{generated/tables/h1_summary.tex}
+  \tablenote{ECB reference rates, full sample. Excess kurtosis is zero for a normal distribution.}
+\end{table}

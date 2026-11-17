@@ -1,0 +1,9 @@
+% Event-study timeline template: estimation window, gap, event window.
+\begin{tikzpicture}[sb, x=1mm, y=1mm]
+  \draw[sb axis] (0,0) -- (120,0) node[right, sb label] {$t$};
+  \foreach \x/\l in {5/{$T_0$}, 60/{$T_1$}, 75/{$\tau-k$}, 90/{$\tau$}, 105/{$\tau+k$}}
+    \draw (\x,1.2) -- (\x,-1.2) node[below, sb label] {\l};
+  \draw[sb brace] (5,2) -- node[above=7pt, sb label] {estimation window} (60,2);
+  \draw[sb brace] (75,2) -- node[above=7pt, sb label] {event window} (105,2);
+  \node[sb label, below=5mm] at (90,0) {event};
+\end{tikzpicture}
