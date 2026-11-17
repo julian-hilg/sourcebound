@@ -13,8 +13,9 @@
   sb status                                  phase, hypotheses, claims (current project)
   sb check                                   ledger + citations + results + contracts
   sb freeze [--amend]                        pre-register hypotheses (date, hashes, commit + tag)
-  sb snap URL --title "..." [--publisher ..] archive a web page, register W-xxxx
-  sb source W-xxxx [--grep words]            read an archived web source (verification)
+  sb snap URL --title "..." [--publisher ..] archive a web page, register W-xxxx (same bytes: the id it has)
+  sb source W-xxxx [--grep W] [--chars N|0] [--out FILE]   read an archived source (verification)
+  sb source set W-xxxx --title "..." [--publisher ..]      correct how a source is named
   sb lake tables | snapshots | sql "..." | export TABLE PATH
   sb bib sync | search "words" | add DOI | import
   sb datasource add ID --name "..." [--url U] [--access api|database|manual|...] [--auth-env VAR]
@@ -65,6 +66,9 @@ SKIP = shutil.ignore_patterns("*.aux", "*.log", "*.fls", "*.fdb_latexmk", "*.out
 def cmd_new(a):
     from . import config, deliverable
     h = config.hub()
+    if "-" in a.slug:                   # the slug names the lake schema proj_<slug>: underscores only
+        a.slug = a.slug.replace("-", "_")
+        print(f"slug {a.slug} (hyphens become underscores)")
     if not re.fullmatch(r"[a-z][a-z0-9_]*", a.slug):
         sys.exit("slug: lowercase letters, digits, _ (e.g. fuel_passthrough)")
     if a.kind == "desk":
@@ -419,7 +423,7 @@ def cmd_run(a):
     """Project build steps in order (what `make` does, without needing make)."""
     import subprocess
 
-    from . import config
+    from . import config, results
     p = config.project()
     steps = STEPS if not a.steps or "all" in a.steps else a.steps
     bad = [s for s in steps if s not in STEPS and not (s.endswith(".py") and (p.root / s).is_file())]
@@ -442,12 +446,28 @@ def cmd_run(a):
         else:
             runs = [[*sb, *{"bib": ["bib", "sync"], "paper": ["build"]}.get(step, [step])]]
         for run in runs:
-            print("==", step if run[:3] == sb else Path(run[1]).relative_to(p.root).as_posix(), flush=True)
+            script = run[:3] != sb
+            print("==", step if not script else Path(run[1]).relative_to(p.root).as_posix(), flush=True)
+            before = results.load(p) if script else {}
             code = subprocess.run(run, cwd=p.root).returncode
             if code:
                 for f, body in (kept or {}).items():        # a failed run leaves the earlier results in place
                     f.write_bytes(body)
                 sys.exit(code)
+            if script:
+                _recorded(before, results.load(p))
+
+
+def _recorded(before: dict, after: dict, limit: int = 20) -> None:
+    """The keys a script recorded (new or written again), with their display values."""
+    keys = sorted(k for k, v in after.items() if before.get(k) != v)
+    if not keys:
+        print("   no results recorded")
+    for k in keys[:limit]:
+        v = after[k]
+        print(f"   {k} = {v.get('display')}" + (f" {v['unit']}" if v.get("unit") and v["unit"] not in str(v.get("display")) else ""))
+    if len(keys) > limit:
+        print(f"   … {len(keys) - limit} more")
 
 
 def cmd_doctor(a):
@@ -542,7 +562,24 @@ def cmd_status(a):
     from . import config, ledger
     p = config.project()
     print(f"{p.slug}: {p.title}  [phase: {p.meta.get('phase', '?')}, lang: {p.lang}]")
+    if p.meta.get("kind") == "desk":
+        print(_desk_status(p))
+        return
     print(ledger.status_table(p))
+
+
+def _desk_status(p) -> str:
+    """A desk has no hypotheses and no claims table: its topic, sources, pieces and results."""
+    from . import ledger, pieces, results
+    rows = [f"topic:   {p.meta.get('topic') or '(not set: one sentence in project.yaml)'}"]
+    if p.meta.get("channels"):
+        rows.append(f"channels: {', '.join(map(str, p.meta['channels']))}")
+    rows.append(f"sources: {len(ledger.load(p)['sources'])} registered (evidence/sources.yaml)")
+    cards = pieces.load(p)
+    n = {s: sum(1 for c in cards if c.get("status") == s) for s in pieces.STATUS}
+    rows.append(f"pieces:  {len(cards)}" + (" (" + ", ".join(f"{k} {v}" for k, v in n.items() if v) + ")" if cards else ""))
+    rows.append(f"results: {len(results.load(p))} recorded")
+    return "\n".join(rows)
 
 
 def cmd_check(a):
@@ -612,18 +649,83 @@ def cmd_snap(a):
         _, ref = f.get(a.url)
     except Blocked as e:
         sys.exit(f"not archived: {e}\n(do not work around this; cite another source or ask the user)")
-    sid = ledger.add_source({"title": a.title, "url": a.url, "publisher": a.publisher or "",
-                             "accessed": ref.fetched_at, "sha256": ref.sha256, "raw": ref.path,
-                             "note": a.note or ""})
-    print(f"{sid}  {a.url}\n      archived raw/{ref.path}  (cite as \\cite{{{sid}}}, ref: {sid} in claims.yaml)")
+    entry = {"title": a.title, "url": a.url, "publisher": a.publisher or "",
+             "accessed": ref.fetched_at, "sha256": ref.sha256, "raw": ref.path, "note": a.note or ""}
+    sid, created = ledger.register_source(entry, new=a.new)
+    if not created:
+        print(already_registered(sid, ref.sha256))
+        return
+    print(f"{sid}  {ledger.source_label(entry)}\n      {a.url}, archived raw/{ref.path}  "
+          f"(cite as \\cite{{{sid}}}, ref: {sid} in claims.yaml)")
+
+
+def already_registered(sid: str, sha256: str) -> str:
+    """The message for bytes that are already a source (`sb snap`, `sb doc`)."""
+    from . import ledger
+    src = next((s for s in ledger.load()["sources"] if s.get("id") == sid), {})
+    return (f"already registered as {sid}  {ledger.source_label(src)}\n      same bytes (sha256 {sha256[:12]}), no new entry; "
+            f"cite {sid}. Correct its title with `sb source set {sid} --title ...`; --new registers it again.")
+
+
+def _show_text(text: str, a, what: str) -> None:
+    """Print a source's text: a grep (merged, numbered passages), or the first --chars characters
+    with a line that says how much is left out.  --out writes the whole text to a file."""
+    if a.out:
+        out = Path(a.out).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        print(f"wrote {out} ({len(text):,} characters, the whole text of {what})")
+        if not a.grep:
+            return
+    if a.grep:
+        hits = [(m.start(), m.end()) for m in re.finditer(re.escape(a.grep), text, re.I)]
+        spans: list[list[int]] = []                 # [start, end, first hit, last hit]
+        for i, (s, e) in enumerate(hits, 1):
+            s, e = max(0, s - 200), min(len(text), e + 200)
+            if spans and s <= spans[-1][1]:
+                spans[-1][1], spans[-1][3] = max(spans[-1][1], e), i
+            else:
+                spans.append([s, e, i, i])
+        print(f'{len(hits)} hit{"s" if len(hits) != 1 else ""} for "{a.grep}"' +
+              (f" in {len(spans)} passage{'s' if len(spans) != 1 else ''}" if hits else ""))
+        for n, (s, e, i, j) in enumerate(spans, 1):
+            label = f"hit {i}" if i == j else f"hits {i}-{j}"
+            passage = re.sub(r"\s+", " ", text[s:e]).strip()
+            print(f"\n[{n}] {label}: {'... ' if s else ''}{passage}{' ...' if e < len(text) else ''}")
+        return
+    if not a.chars or a.chars >= len(text):
+        print(text)
+        return
+    cut = text[: a.chars]
+    space = max(cut.rfind(" "), cut.rfind("\n"))
+    if space > a.chars - 200:                       # end on a word, not inside one
+        cut = cut[:space]
+    print(cut.rstrip())
+    print(f"\n... ({len(cut):,} of {len(text):,} characters shown; --chars N for more, --chars 0 for all, "
+          "--grep WORD to search, --out FILE for the whole text)")
 
 
 def cmd_source(a):
-    """Text of an archived web source (for verification): sb source W-0003 [--grep word]."""
+    """Text of an archived source (for verification): sb source W-0003 [--grep word] [--out FILE];
+    sb source set W-0003 --title ... --publisher ... corrects how it is named."""
     import html as htmlmod
 
     from . import ledger
     from .fetch import read_raw
+    fields = {k: getattr(a, k) for k in ledger.SOURCE_FIELDS if getattr(a, k, None) is not None}
+    if a.id == "set":
+        if not a.sid or not fields:
+            sys.exit('usage: sb source set W-xxxx [--title "..."] [--publisher "..."] [--author "..."] [--date YYYY-MM-DD]')
+        try:
+            before, after = ledger.update_source(a.sid, fields)
+        except (KeyError, ValueError) as e:
+            sys.exit(str(e).strip("'\""))
+        changes = [f"{k}: {before.get(k) or '(none)'} -> {after.get(k) or '(none)'}" for k in fields if before.get(k) != after.get(k)]
+        print(f"{a.sid}  {ledger.source_label(after)}\n      " + ("; ".join(changes) if changes else "nothing changed") +
+              ("\n      renders made before still show the old name; render the pieces that cite it again" if changes else ""))
+        return
+    if a.sid or fields:
+        sys.exit("--title, --publisher, --author and --date change a source: sb source set W-xxxx --title ...")
     src = {s["id"]: s for s in ledger.load()["sources"]}.get(a.id)
     if src is None and not re.fullmatch(r"W-\d+", a.id):          # a citation key: the paper store
         from . import library
@@ -633,31 +735,30 @@ def cmd_source(a):
             sys.exit(str(e))
         print(f"{a.id}  {info['kind']}" + (f", page {a.page}" if a.page else "") + f"  (PDF sha256 {info['sha256'][:12]}; "
               "the PDF page is the authority)")
-        if a.grep:
-            for m in re.finditer(re.escape(a.grep), text, re.I):
-                print("...", text[max(0, m.start() - 200):m.end() + 200].replace("\n", " "), "...")
-        else:
-            print(text[: a.chars])
+        _show_text(text, a, a.id)
         return
     if src is None or not src.get("sha256"):
         sys.exit(f"{a.id}: no archived snapshot")
     body = read_raw("web", src["sha256"])
+    notice = ""
     if src.get("raw", "").endswith(".pdf.zst"):
         from . import pdftext
         text, _engine = pdftext.text(body, page=a.page)
     elif src.get("file"):                               # a document brought in with `sb doc`
-        from .cli_more import document_text
+        from .cli_more import document_info, document_text
         text = document_text(body, src["file"])
+        info = document_info(body, src["file"])
+        missing = [f"{n} {w}{'s' if n != 1 else ''}" for w, n in (("image", info["images"]), ("chart", info["charts"])) if n]
+        if missing:
+            notice = f"      {' and '.join(missing)} not read (charts and figures are not text)\n"
     else:
         t = body.decode("utf-8", errors="replace")
         t = re.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", t)
         text = htmlmod.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", t)))
-    print(f"{a.id}  {src['url']}  (accessed {src.get('accessed', '?')}, sha256 {src['sha256'][:12]})")
-    if a.grep:
-        for m in re.finditer(re.escape(a.grep), text, re.I):
-            print("...", text[max(0, m.start() - 200):m.end() + 200].replace("\n", " "), "...")
-    else:
-        print(text[: a.chars])
+    where = f"file {src['file']}" if src.get("file") else src["url"]
+    print(f"{a.id}  {ledger.source_label(src)}\n      {where}  (accessed {src.get('accessed', '?')}, sha256 {src['sha256'][:12]})\n"
+          + notice)
+    _show_text(text, a, a.id)
 
 
 def databases_error():
@@ -1043,11 +1144,18 @@ def main(argv=None):
     s.add_argument("--amend", action="store_true", help="accept changes that a new entry under amendments: explains")
     s.set_defaults(f=cmd_freeze)
     s = sub.add_parser("snap"); s.add_argument("url"); s.add_argument("--title", required=True)
-    s.add_argument("--publisher"); s.add_argument("--note"); s.set_defaults(f=cmd_snap)
+    s.add_argument("--publisher"); s.add_argument("--note")
+    s.add_argument("--new", action="store_true", help="register again even if the same bytes are already a source")
+    s.set_defaults(f=cmd_snap)
     s = sub.add_parser("unblock"); s.add_argument("source"); s.add_argument("host", nargs="?")
     s.set_defaults(f=cmd_unblock)
-    s = sub.add_parser("source"); s.add_argument("id"); s.add_argument("--grep")
-    s.add_argument("--chars", type=int, default=4000); s.add_argument("--page", type=int)
+    s = sub.add_parser("source", help="read an archived source or paper; `sb source set W-xxxx --title ...` corrects its name")
+    s.add_argument("id", help="W-xxxx, a citation key, or `set`"); s.add_argument("sid", nargs="?", help="with `set`: the W-xxxx to change")
+    s.add_argument("--grep", help="passages around each hit (overlapping ones merged), numbered, with a count")
+    s.add_argument("--chars", type=int, default=4000, help="characters to print (default 4000; 0 for all)")
+    s.add_argument("--page", type=int); s.add_argument("--out", help="write the whole text to this file")
+    for opt in ("title", "publisher", "author", "date"):
+        s.add_argument(f"--{opt}", help="with `set`: the new value")
     s.set_defaults(f=cmd_source)
     s = sub.add_parser("papers"); s.add_argument("what", choices=["sync", "convert", "status"])
     s.add_argument("--background", action="store_true", help="convert detached from this session")

@@ -106,6 +106,7 @@ def problems(project: config.Project | None = None, *, strict: bool = False) -> 
     errs, warns = [], []
     no_commit, dirty, no_data = [], [], []
     snaps: dict[str, set] = {}
+    known: dict = {}
     for k, v in load(p).items():
         prov = v.get("provenance") or {}
         script = prov.get("script")
@@ -114,8 +115,10 @@ def problems(project: config.Project | None = None, *, strict: bool = False) -> 
                         "(stale, or recorded by hand); `sb run analysis` rebuilds the results")
         git = prov.get("git")
         (no_commit if not git else dirty if str(git).endswith("+dirty") else []).append(k)
-        if not prov.get("data"):
+        if not prov.get("data") and not prov.get("sources"):
             no_data.append(k)
+        for s in unknown_sources(prov.get("sources") or [], p, known):
+            warns.append(f"result {k} rests on source {s}, which is not registered in this project")
         for t, s in (prov.get("data") or {}).items():
             snaps.setdefault(t, set()).add(s)
     short = lambda ks: ", ".join(ks[:4]) + (f" and {len(ks) - 4} more" if len(ks) > 4 else "")
@@ -128,17 +131,39 @@ def problems(project: config.Project | None = None, *, strict: bool = False) -> 
         if len(s) > 1:
             hard.append(f"results use different snapshots of {t} ({sorted(map(str, s))}): `sb run analysis`")
     if no_data:
-        warns.append(f"{len(no_data)} results name no lake table ({short(no_data)}): read data with lake.read so the snapshot is recorded")
+        warns.append(f"{len(no_data)} results name no lake table ({short(no_data)}) and no source: read data with lake.read so the "
+                     "snapshot is recorded, or name the registered source with results.record(..., sources=[\"W-0001\"])")
     return errs, warns
+
+
+def unknown_sources(ids: list[str], project: config.Project, known: dict | None = None) -> list[str]:
+    """The ids that are neither a source in evidence/sources.yaml nor a citation key of the project.
+    `known` (a dict) keeps the project's evidence between calls."""
+    if not ids:
+        return []
+    known = {} if known is None else known
+    if not known:
+        from . import render
+        known["refs"], known["web"] = render.evidence(project)
+    return [s for s in ids if s not in known["web"] and s not in known["refs"]]
 
 
 def record(key: str, value, *, fmt: str | None = None, unit: str | None = None,
            hypothesis: str | None = None, note: str | None = None,
-           ci: tuple[float, float] | None = None) -> str:
-    """Store one result; returns the formatted display string."""
+           ci: tuple[float, float] | None = None, sources: list[str] | str | None = None) -> str:
+    """Store one result; returns the formatted display string.
+
+    `sources`: the registered sources the inputs come from when they are not a lake table,
+    e.g. `sources=["W-0001"]` (ids from evidence/sources.yaml) or citation keys.  They are
+    stored in the provenance; an unknown id gives a warning, not an error.
+    """
     if not key.replace(".", "").replace("_", "").replace("-", "").isalnum():
         raise ValueError("result keys: letters, digits, '.', '_', '-' (e.g. h1.kurtosis)")
     p = config.project()
+    sources = [str(s).strip().lstrip("@") for s in ([sources] if isinstance(sources, str) else sources or [])]
+    for s in unknown_sources(sources, p):
+        print(f"warning: result {key}: source {s} is not registered in this project "
+              "(evidence/sources.yaml, evidence/inbox.bib or a references.bib)", file=sys.stderr)
     display = format_value(value, fmt, p.german)
     script = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
     entry = {
@@ -153,6 +178,7 @@ def record(key: str, value, *, fmt: str | None = None, unit: str | None = None,
             "script": script.relative_to(p.root).as_posix() if script and script.is_relative_to(p.root) else str(script),
             "git": _git(p.root),
             "data": dict(lake.READS),
+            **({"sources": sources} if sources else {}),
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         },
     }

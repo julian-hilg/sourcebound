@@ -88,3 +88,50 @@ def test_export_as_zip_round_trips(tmp_path):
     out = assets.export_pack(tmp_path / "carry.zip", designs_=["firm"], templates_=["firm-post"])
     info = packzip.check(out)
     assert (info["name"], info["designs"], info["templates"]) == ("carry", ["firm"], ["firm-post"])
+
+
+def _folder(root: Path, files: dict[str, str | bytes]) -> Path:
+    for name, data in files.items():
+        f = root / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(data if isinstance(data, bytes) else data.encode("utf-8"))
+    return root
+
+
+def test_an_install_records_where_it_came_from_and_a_reinstall_says_what_changed(tmp_path):
+    import hashlib
+
+    from sourcebound import assets, config
+    reg = config.hub().registry
+    z = make(tmp_path / "firm.zip", GOOD)
+    first = assets.install_pack(z)
+    rec = yaml.safe_load((reg / "packs" / "firm.yaml").read_text(encoding="utf-8"))
+    assert rec["source"] == str(z.resolve()) and rec["source_kind"] == "zip"
+    assert rec["sha256"] == hashlib.sha256(z.read_bytes()).hexdigest() and len(rec["content_sha256"]) == 64
+    assert first["source_differs"] is False and first["changed"] == []
+
+    # the same pack as a folder: same content, so nothing counts as changed
+    folder = _folder(tmp_path / "firm-pack", GOOD)
+    again = assets.install_pack(folder)
+    rec = yaml.safe_load((reg / "packs" / "firm.yaml").read_text(encoding="utf-8"))
+    assert (rec["source"], rec["source_kind"]) == (str(folder.resolve()), "folder")
+    assert rec["sha256"] == assets.tree_sha256(folder) and again["source_differs"] is False
+    assert again["unchanged"] == ["design firm", "template firm-post", "template firm-slides"] and again["changed"] == []
+
+    # one template edited in the folder: the reinstall says so, and names where the old one came from
+    (folder / "templates" / "firm-slides" / "layout.js").write_text("// changed", encoding="utf-8")
+    (folder / ".DS_Store").write_bytes(b"ignored")                # not part of the hash
+    third = assets.install_pack(folder)
+    assert third["source_differs"] is True
+    assert len(third["changed"]) == 1 and third["changed"][0].startswith("template firm-slides (installed ")
+    assert str(folder.resolve()) in third["changed"][0]
+    assert (reg / "templates" / "firm-slides" / "layout.js").read_text(encoding="utf-8") == "// changed"
+
+
+def test_tree_hash_ignores_what_an_install_skips(tmp_path):
+    from sourcebound import assets
+    a = _folder(tmp_path / "a", {"designs/x/design.yaml": "name: X\n"})
+    b = _folder(tmp_path / "b", {"designs/x/design.yaml": "name: X\n", "designs/x/.DS_Store": b"x", "designs/x/~$lock.docx": b"x"})
+    assert assets.tree_sha256(a) == assets.tree_sha256(b)
+    (b / "designs" / "x" / "design.yaml").write_text("name: Y\n", encoding="utf-8")
+    assert assets.tree_sha256(a) != assets.tree_sha256(b)

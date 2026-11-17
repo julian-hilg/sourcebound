@@ -15,8 +15,10 @@ A pack is data: designs and templates. A zip may hold only that:
 * every design folder has `design.yaml`, every template folder `template.yaml`
 
 `pack.yaml` is optional: `name`, `version`, `description`. Installing records it in
-`<registry>/packs/<name>.yaml` with the date and the ids, so the installed version can be looked up.
-A design or template with an id that is already installed is replaced; the result says which.
+`<registry>/packs/<name>.yaml` with the date, the ids, the path of the zip and its sha256 (and of
+the installed content), so the installed version can be looked up and traced to its file.
+A design or template with an id that is already installed is replaced; the result says which, and
+which of them differ from what was installed.
 """
 from __future__ import annotations
 
@@ -128,11 +130,10 @@ def _prefix(names: list[str]) -> str:
 
 def install(path: str | Path) -> dict:
     """Check, unpack into a temporary folder, install from there; returns what was installed and replaced."""
-    from . import assets, config
+    from . import assets
     info = check(path)
-    reg = config.hub().registry
-    replaced = [f"{k[:-1]} {i}" for k in ("designs", "templates") for i in info[k] if (reg / k / i).exists()]
-    with tempfile.TemporaryDirectory(prefix="sb-pack-") as tmp, zipfile.ZipFile(path) as zf:
+    z = Path(path).expanduser().resolve()
+    with tempfile.TemporaryDirectory(prefix="sb-pack-") as tmp, zipfile.ZipFile(z) as zf:
         root = Path(tmp)
         for i in zf.infolist():
             name = i.filename.replace("\\", "/")
@@ -145,14 +146,11 @@ def install(path: str | Path) -> dict:
             dest.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(i) as src, dest.open("wb") as out:
                 shutil.copyfileobj(src, out)
-        done = assets.install_pack(root)
-    record = {"name": info["name"], "version": info["version"], "description": info["description"],
-              "file": Path(path).name, "installed": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "designs": done["designs"], "templates": done["templates"]}
-    (reg / "packs").mkdir(parents=True, exist_ok=True)
-    config.write_atomic(reg / "packs" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', info['name'])}.yaml",
-                        yaml.safe_dump(record, sort_keys=False, allow_unicode=True))
-    return {**done, "replaced": replaced, "pack": info}
+        done = assets.install_pack(root, provenance={
+            "name": info["name"], "version": info["version"], "description": info["description"],
+            "source": str(z), "source_kind": "zip", "file": z.name, "sha256": assets.file_sha256(z)})
+    done["pack"] = {**done["pack"], "files": info["files"]}
+    return done
 
 
 def export(path: str | Path, folder: Path, *, name: str = "", version: str = "") -> Path:

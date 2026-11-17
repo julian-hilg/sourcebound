@@ -134,6 +134,7 @@ sequenceDiagram
 ```sh
 sb doc report.pdf --title "..." --publisher "..."      # a local report becomes a citable source (W-0001)
 sb snap https://example.org/page --title "..."         # so does a web page, archived
+sb source W-0001 --grep word                           # read it: numbered passages (--out FILE: all)
 sb piece add "Large moves are more frequent than expected" --kind post --template text
 sb piece check                                         # sources registered, numbers recorded
 sb render <piece> --template <template>                # text, Markdown, Word, slides

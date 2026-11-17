@@ -81,6 +81,8 @@ strong { font-weight: var(--w-medium); }
 .kpis { display: grid; border-top: 1px solid var(--c-hair-2); }
 .kpi { padding: 24px 24px 0 0; min-width: 0; }
 .kpi + .kpi { padding-left: 24px; border-left: 1px solid var(--c-hair); }
+.kpi.rs { padding-left: 0; border-left: none; }          /* the first number of a row */
+.kpis { row-gap: 32px; }
 .kpi .n { font-weight: var(--w-medium); font-size: 54px; line-height: 1; color: var(--c-primary); white-space: nowrap; }
 .kpi .t { font-weight: var(--w-light); font-size: 20px; line-height: 1.4; color: var(--c-ink-soft); margin-top: 12px; }
 

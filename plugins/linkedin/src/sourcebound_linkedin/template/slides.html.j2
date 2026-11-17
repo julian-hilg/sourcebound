@@ -18,8 +18,11 @@
 <div class="block{{ ' grow' if b.grow }}{{ ' push' if b.push }}" data-block="{{ b.type }}">
 {{ exhibit(b) }}
 {%- if b.type == "kpis" %}
-  <div class="kpis" style="grid-template-columns:repeat({{ b['items']|length }},1fr)">
-  {%- for k in b['items'] %}<div class="kpi"><div class="n" data-fit>{{ k.n }}</div><div class="t">{{ k.t }}</div></div>{% endfor %}
+  {#- at most three numbers side by side (four on a wide slide); four go in two rows of two -#}
+  {%- set n = b['items']|length -%}
+  {%- set cols = n if n <= 3 or (deck.width > deck.height and n <= 4) else (2 if n == 4 else 3) -%}
+  <div class="kpis" style="grid-template-columns:repeat({{ cols }},1fr)">
+  {%- for k in b['items'] %}<div class="kpi{{ ' rs' if loop.index0 % cols == 0 }}"><div class="n" data-fit>{{ k.n }}</div><div class="t">{{ k.t }}</div></div>{% endfor %}
   </div>
 {%- elif b.type == "bars" %}
   <div class="bars"{% if b.label_width %} style="--lw:{{ b.label_width }}px" data-fixed{% endif %}>
@@ -133,7 +136,7 @@
   </div>
   <div class="foot">
     <div class="meta">{% if s.note %}<span class="note">{{ s.note }}</span><br>{% endif %}{% if s.source %}<span class="src">{{ source_prefix }}{{ s.source }}</span>{% endif %}</div>
-    <div class="brand">{{ brand() }}<span class="pg">{{ loop.index }}</span></div>
+    <div class="brand">{{ brand() }}{% if slides|length > 1 %}<span class="pg">{{ loop.index }}</span>{% endif %}</div>
   </div>
 </section>
 {%- endif %}

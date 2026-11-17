@@ -123,8 +123,6 @@ def check(piece_id: str, project=None) -> tuple[list[str], list[str]]:
         n = len(data.get("slides") or []) if isinstance(data, dict) else 0
         if n > MAX_SLIDES:
             warns.append(f"{n} slides; an image post takes {MAX_SLIDES}, and readers rarely go past 10")
-        elif n < 2 and n:
-            warns.append("one slide: post it as a single image (the carousel PDF needs two pages to swipe)")
     rs = [m for m in render.renders(pieces.folder(p, piece_id) / "render") if m.get("kind") == "slides"]
     if data and not rs:
         warns.append("the slides are not rendered yet: sb render <piece> --template <slides template>")
@@ -135,19 +133,44 @@ def check(piece_id: str, project=None) -> tuple[list[str], list[str]]:
     return errs, warns
 
 
-STEPS = """How to post this (by hand; Sourcebound does not post)
+# The steps to post by hand, in the language of the post (de or en; anything else gets en).
+STEPS = {
+    "en": {
+        "head": "How to post this (by hand; Sourcebound does not post)",
+        "open": "Open LinkedIn and start a post.",
+        "paste": "Paste the text from post.txt.",
+        "slides": ("Add the slides, one of two ways:\n"
+                   "   - as a document: \"Add a document\", choose {pdf}, give it a title. Readers swipe through the pages.\n"
+                   "   - as images: \"Add media\", choose the PNG files in order ({first} ... {last}).\n"
+                   "     Give each image its alternative text from alt-texts.txt."),
+        "image": "Add the image: \"Add media\", choose {first}, and give it the alternative text from alt-texts.txt.",
+        "check": "Check the preview, then post or schedule.",
+        "record": "Record it: sb piece set {piece} --status published --url <the post's address>",
+        "foot": "Text: {chars} of {limit} characters. Slides: {n}. Template: {template}, design: {design}, rendered {at}.",
+    },
+    "de": {
+        "head": "So wird der Beitrag gepostet (von Hand; Sourcebound postet nicht)",
+        "open": "LinkedIn öffnen und einen Beitrag beginnen.",
+        "paste": "Den Text aus post.txt einfügen.",
+        "slides": ("Die Folien hinzufügen, auf einem von zwei Wegen:\n"
+                   "   - als Dokument: {pdf} als Dokument hochladen und ihm einen Titel geben. Die Leser blättern durch die Seiten.\n"
+                   "   - als Bilder: die PNG-Dateien in dieser Reihenfolge als Medien hochladen ({first} ... {last}).\n"
+                   "     Jedem Bild seinen Alternativtext aus alt-texts.txt geben."),
+        "image": "Das Bild hinzufügen: {first} als Medium hochladen und ihm den Alternativtext aus alt-texts.txt geben.",
+        "check": "Die Vorschau prüfen, dann posten oder planen.",
+        "record": "Festhalten: sb piece set {piece} --status published --url <Adresse des Beitrags>",
+        "foot": "Text: {chars} von {limit} Zeichen. Folien: {n}. Vorlage: {template}, Design: {design}, gerendert {at}.",
+    },
+}
 
-1. Open LinkedIn and start a post.
-2. Paste the text from post.txt.
-3. Add the slides, one of two ways:
-   - as a document: "Add a document", choose {pdf}, give it a title. Readers swipe through the pages.
-   - as images: "Add media", choose the PNG files in order ({first} ... {last}).
-     Give each image its alternative text from alt-texts.txt.
-4. Check the preview, then post or schedule.
-5. Record it: sb piece set {piece} --status published --url <the post's address>
 
-Text: {chars} of {limit} characters. Slides: {n}. Template: {template}, design: {design}, rendered {at}.
-"""
+def steps(lang: str | None, **v) -> str:
+    """README.txt of a bundle: the steps to post it by hand, in the post's language."""
+    t = STEPS["de" if str(lang or "").lower().startswith("de") else "en"]
+    add = t["slides"] if v.get("pdf") and v.get("n", 0) > 1 else t["image"]
+    lines = [t["open"], t["paste"], add, t["check"], t["record"]]
+    body = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
+    return (t["head"] + "\n\n" + body + "\n\n" + t["foot"] + "\n").format(**v)
 
 
 def bundle(piece_id: str, *, template: str | None = None, out: str | None = None, project=None) -> Path:
@@ -173,7 +196,9 @@ def bundle(piece_id: str, *, template: str | None = None, out: str | None = None
         if name and (src / name).exists():
             shutil.copy2(src / name, dest / name)
     (dest / "alt-texts.txt").write_text("\n\n".join(f"{s['file']}\n{s['alt']}" for s in pv["slides"] if s["file"]) + "\n", encoding="utf-8")
-    (dest / "README.txt").write_text(STEPS.format(pdf=pv["document"], first=names[0], last=names[-1], piece=piece_id, chars=pv["characters"],
-                                                  limit=pv["limit"], n=len(names), template=m["template"], design=m["design"], at=m["at"]),
+    deck = (render.from_piece(p, piece_id).data.get("slides") or {}).get("deck") or {}
+    lang = deck.get("lang") or pv.get("lang") or p.lang         # the deck's language, else the piece's, else the project's
+    (dest / "README.txt").write_text(steps(lang, pdf=pv["document"], first=names[0], last=names[-1], piece=piece_id, chars=pv["characters"],
+                                           limit=pv["limit"], n=len(names), template=m["template"], design=m["design"], at=m["at"]),
                                      encoding="utf-8")
     return dest

@@ -36,12 +36,24 @@ question needs testing. The evidence carries over because it has the same form i
 ```sh
 sb snap URL --title "..." --publisher "..."     # a web page: archived, id W-0007
 sb doc FILE --title "..." --publisher "..."     # a report, a PDF, a Word file: archived, id W-0008
-sb source W-0008 --grep word                    # read the archived copy
+sb source W-0008                                # read the archived copy (the first 4,000 characters)
+sb source W-0008 --grep word                    # every passage with "word", numbered, with a count
+sb source W-0008 --out /tmp/w0008.txt           # the whole text in a file, for a long report
+sb source set W-0008 --publisher "..."          # correct the title or publisher afterwards
 ```
 
 `sb doc` is how a folder of existing reports becomes material for a piece: each file used is
-archived unchanged (by its hash) and gets an id to cite. PDF needs `pdftotext` to be read
-back; Word, PowerPoint, HTML and text files are read directly.
+archived unchanged (by its hash) and gets an id to cite. The same file registered again keeps
+its id (`already registered as W-0008`); `--new` forces a second entry. PDF needs `pdftotext`
+(or `pypdf`) to be read back; Word, PowerPoint, HTML and text files are read directly.
+
+`sb source` says when it cuts: the last line gives how many characters were shown of how many
+(`--chars N` for more, `--chars 0` for all). Overlapping `--grep` passages are merged.
+From a Word file it reads the body, then footnotes and endnotes under a `Footnotes` /
+`Endnotes` line, numbered as in the text (`[^1]`); table cells are separated by ` | `, one row
+per line; field codes and the second copy of a text box are left out. Images and charts are
+not text: the header says how many a document holds, so a number in a figure is quoted only
+from a source that states it in words.
 
 ## Pieces
 
@@ -63,8 +75,44 @@ sb piece set ID --status published --url URL
 ```
 
 `sb piece check` fails on a cited source that is not registered and on a result that was not
-recorded. It warns about numbers typed by hand (they must come with a citation), about a text
-with no citation at all, and about a render that shows an older value of a result.
+recorded. It warns about a text with no citation at all and about a render that shows an older
+value of a result.
+
+Numbers typed by hand are checked in `text.md` and in every string of the piece's data files
+(`slides.yaml`: titles, kpis, bar texts, labels, notes). A number here is a decimal, a
+percentage, an integer with a thousands separator (`41.499`), a number with a currency, unit or
+scale (`1.800 €`, `1 Mio.`, `150 Mrd. €`, `10x`) or a bare integer of three or more digits.
+Years, dates, times, `§ 34f`, `Art. 6`, page numbers in a citation, ids, hashtags and the levels
+1, 5, 10, 90, 95 and 99 % are not counted. A number whose sentence cites a source is listed as
+info ("quoted with a citation in the same sentence", to confirm against the source); one
+without a citation is a warning. In `slides.yaml` a slide's `source` line counts as the
+citation for everything on that slide; positions in the reported path count from 1
+(`slides[3].blocks[1].items[1].n`).
+
+A number computed in `analysis/` from figures of a registered document names that document:
+
+```python
+results.record("verm.je_dach", 16211 / 139, fmt="{:.0f}", sources=["W-0001"])
+```
+
+The ids (`W-xxxx` or citation keys) are stored in the result's provenance. An id that is not
+registered gives a warning, not an error. Such a result no longer gets the "names no lake
+table" warning of `sb check`, and `sb piece check` shows, for each `{{result:key}}` a piece
+uses, the sources or lake tables it rests on. `sb run analysis` prints after each script the
+keys it recorded, with their values (20 per script, then the count of the rest).
+
+Rendered files (`*.png`, `*.pdf`, `*.html`, `*.docx`, `*.pptx` under `pieces/*/render/`) are
+not committed in a new desk: its `.gitignore` leaves them out, because each render would add
+another copy of several MB to git. `render.json`, `preview.json` and `layout.json` stay tracked;
+the staleness check and the web view read files on disk, and `sb render` makes the files again.
+A desk created earlier gets the same by adding those lines to its `.gitignore`
+(and `git rm --cached` for files already committed).
+
+`sb new` turns hyphens in a slug into underscores (`desk-2026` becomes `desk_2026`), because
+the slug also names the project's lake schema `proj_<slug>`. `sb piece add` makes an id from
+the date and the title's first words, cut at a word boundary (about 28 characters), and sets
+the channel when `project.yaml` names exactly one. `sb status` on a desk shows the topic, the
+sources registered, the pieces by status and the number of recorded results.
 
 Nothing in Sourcebound posts to a network. `scheduled` records the intention; the frontend
 shows the schedule and a preview; a plugin may prepare a bundle to post by hand. The preview
@@ -106,8 +154,12 @@ copied, and refused as a whole with every problem named:
 | Completeness | each design folder has `design.yaml`, each template folder `template.yaml` |
 
 `pack.yaml` (optional) gives `name`, `version` and `description`; `sb pack export NAME.zip`
-writes one. An install records the pack in `<registry>/packs/<name>.yaml`, and ids that were
-already installed are replaced and listed as such.
+writes one. An install from a folder reads the folder's `pack.yaml` (else the folder's name).
+It records the pack in `<registry>/packs/<name>.yaml`: name, version, the path it came from,
+the sha256 of the source (the zip file, or the folder's files) and of its designs and templates,
+the date and the ids. Ids that were already installed are replaced; the install lists which of
+them differ from what was installed (and where that came from) and which are the same, and says
+when the pack's content differs from its last install.
 
 The checkout ships one neutral design and two renderers without dependencies (`markdown`,
 `text`). An organisation's design is never part of the checkout: it lives in a pack that the

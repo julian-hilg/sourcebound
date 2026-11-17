@@ -207,24 +207,113 @@ def new_template(ident: str, kind: str, *, title: str = "", design_id: str | Non
 
 
 # ------------------------------------------------------------------ packs
-def install_pack(folder: str | Path) -> dict[str, list[str]]:
-    """Copy the designs and templates of a pack folder (or a checked .zip, see packzip) into the registry."""
+PACK_IGNORE = ("~$*", ".DS_Store", "Thumbs.db", "__pycache__")
+
+
+def _ignored(rel: Path) -> bool:
+    import fnmatch
+    return any(fnmatch.fnmatch(part, pat) for part in rel.parts for pat in PACK_IGNORE)
+
+
+def tree_sha256(folder: str | Path, *, only: tuple[str, ...] = ()) -> str:
+    """One sha256 over a folder: every file's relative path and content, in sorted order.
+
+    Files a pack install skips (Office lock files, .DS_Store, Thumbs.db, __pycache__) are left
+    out, so a pack folder and the copy installed from it give the same value.  `only` limits the
+    hash to these top-level folders (e.g. designs and templates).
+    """
+    import hashlib
+    root = Path(folder)
+    h = hashlib.sha256()
+    for f in sorted(p for p in root.rglob("*") if p.is_file()):
+        rel = f.relative_to(root)
+        if _ignored(rel) or (only and rel.parts[0] not in only):
+            continue
+        h.update(rel.as_posix().encode("utf-8") + b"\0" + hashlib.sha256(f.read_bytes()).digest())
+    return h.hexdigest()
+
+
+def file_sha256(path: str | Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def pack_records() -> list[dict]:
+    """What was installed from which pack: `<registry>/packs/<name>.yaml`, newest first."""
+    d = config.hub().registry / "packs"
+    out = []
+    for f in sorted(d.glob("*.yaml")) if d.is_dir() else []:
+        try:
+            rec = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(rec, dict):
+            out.append({**rec, "record": f.name})
+    return sorted(out, key=lambda r: str(r.get("installed") or ""), reverse=True)
+
+
+def _installed_from(kind: str, ident: str, records: list[dict]) -> dict | None:
+    return next((r for r in records if ident in (r.get(kind) or [])), None)
+
+
+def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
+    """Copy the designs and templates of a pack folder (or a checked .zip, see packzip) into the registry.
+
+    The install is recorded in `<registry>/packs/<name>.yaml`: where it came from (path), the
+    sha256 of the source (the zip file, or the folder's files) and of the installed content.  A
+    design or template that is installed already is compared with the new one first: the result
+    lists it under `changed` (with the pack it came from) or `unchanged`.
+    """
     if str(folder).lower().endswith(".zip"):
         from . import packzip
         return packzip.install(folder)
     src = Path(folder).expanduser().resolve()
-    out: dict[str, list[str]] = {"designs": [], "templates": []}
-    for kind in out:
+    reg = config.hub().registry
+    records = pack_records()
+    out: dict = {"designs": [], "templates": [], "replaced": [], "changed": [], "unchanged": []}
+    for kind in ("designs", "templates"):
         for d in sorted((src / kind).glob("*")):
             if (d / f"{kind[:-1]}.yaml").exists():
-                dest = config.hub().registry / kind / d.name
+                dest = reg / kind / d.name
                 if dest.exists():
+                    out["replaced"].append(f"{kind[:-1]} {d.name}")
+                    if tree_sha256(dest) == tree_sha256(d):
+                        out["unchanged"].append(f"{kind[:-1]} {d.name}")
+                    else:
+                        was = _installed_from(kind, d.name, records)
+                        out["changed"].append(f"{kind[:-1]} {d.name}" + (
+                            f" (installed {str(was.get('installed', ''))[:10]} from {was.get('source') or was.get('file')})" if was else ""))
                     shutil.rmtree(dest)
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(d, dest, ignore=shutil.ignore_patterns("~$*", ".DS_Store", "Thumbs.db", "__pycache__"))
+                shutil.copytree(d, dest, ignore=shutil.ignore_patterns(*PACK_IGNORE))
                 out[kind].append(d.name)
     if not out["designs"] and not out["templates"]:
         raise FileNotFoundError(f"{src} holds neither designs/<id>/design.yaml nor templates/<id>/template.yaml")
+    if provenance is None:                       # a folder: its own pack.yaml, else the folder's name
+        manifest = {}
+        if (src / "pack.yaml").is_file():
+            manifest = yaml.safe_load((src / "pack.yaml").read_text(encoding="utf-8")) or {}
+        provenance = {"name": str(manifest.get("name") or src.name), "version": str(manifest.get("version") or ""),
+                      "description": str(manifest.get("description") or ""), "source": str(src), "source_kind": "folder",
+                      "sha256": tree_sha256(src)}
+    out["pack"] = {**provenance, "files": sum(1 for f in src.rglob("*") if f.is_file() and not _ignored(f.relative_to(src)))}
+    # the same pack installed before: did its content change? (content, so that a zip and the
+    # folder it was made from count as the same pack)
+    content = tree_sha256(src, only=("designs", "templates"))
+    out["previous"] = next((r for r in records if r.get("name") == provenance["name"]), None)
+    out["source_differs"] = bool(out["previous"] and out["previous"].get("content_sha256")
+                                 and out["previous"]["content_sha256"] != content)
+    from datetime import datetime, timezone
+    record = {**provenance, "content_sha256": content,
+              "installed": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "designs": out["designs"], "templates": out["templates"]}
+    (reg / "packs").mkdir(parents=True, exist_ok=True)
+    config.write_atomic(reg / "packs" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', record['name'])}.yaml",
+                        yaml.safe_dump(record, sort_keys=False, allow_unicode=True))
     return out
 
 

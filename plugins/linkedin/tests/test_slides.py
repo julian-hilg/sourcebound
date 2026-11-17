@@ -143,7 +143,9 @@ def test_without_a_browser_only_the_page_is_written(desk, monkeypatch, capsys):
     assert browser.find() is None
     m = render.render("post", "slides-test", project=config.project(desk))
     out = Path(m["folder"])
-    assert m["files"] == ["layout.json", "preview.json", "t.html"] and "No Chromium browser was found" in capsys.readouterr().out
+    assert m["files"] == ["layout.json", "preview.json", "t.html"]
+    assert any("No Chromium browser was found" in n for n in m["notes"])          # a note, printed once by `sb render`
+    assert "No Chromium" not in capsys.readouterr().out
     assert json.loads((out / "layout.json").read_text(encoding="utf-8"))["browser"] is None
     pv = json.loads((out / "preview.json").read_text(encoding="utf-8"))
     assert pv["slides"][0]["file"] is None and pv["document"] is None and pv["characters"] == len(pv["text"])
@@ -227,3 +229,96 @@ def test_a_colour_outside_the_design_is_refused(desk):
     (t / "slides.css").write_text((t / "slides.css").read_text(encoding="utf-8") + "\n.title { color: #ff00aa; }\n")
     with pytest.raises(ValueError, match="colour #ff00aa is not in the design"):
         render.render("post", "slides-test", project=config.project(desk))
+
+
+def test_references_and_amounts_do_not_break_across_lines(desk):
+    nb = " "
+    assert deck.keep_together("Honorarberater (§ 34h), §§ 34f, Art. 5 Nr. 3") == f"Honorarberater (§{nb}34h), §§{nb}34f, Art.{nb}5 Nr.{nb}3"
+    assert deck.keep_together("1.800 € and 44 %, 5 Mrd. €, EUR 20") == f"1.800{nb}€ and 44{nb}%, 5{nb}Mrd.{nb}€, EUR{nb}20"
+    assert deck.keep_together("2 children in 2024") == "2 children in 2024"           # a number without a unit stays as it is
+    data = copy.deepcopy(DECK)
+    data["slides"][0]["title"] = "Advisers under § 34h earn 44 % more"
+    data["slides"][0]["blocks"][0]["groups"][0]["rows"][1]["label"] = "Bonds (§ 34f)"
+    doc = doc_of(desk, data)
+    out = deck.prepare(doc.data["slides"], doc, assets.template("slides-test"), assets.design())
+    assert out["slides"][0]["title"] == f"Advisers under §{nb}34h earn 44{nb}% more"
+    assert out["slides"][0]["blocks"][0]["groups"][0]["rows"][1]["label"] == f"Bonds (§{nb}34f)"
+    assert out["slides"][0]["blocks"][0]["max"] == 20                                # numbers are not touched
+    assert nb not in deck.alt_text(out["slides"][0])                                  # alt text stays plain
+
+
+def test_kpis_wrap_after_three_and_four_go_in_two_rows(desk):
+    def columns(n, width=1080, height=1350):
+        data = copy.deepcopy(DECK)
+        data["deck"].update(width=width, height=height)
+        data["slides"][0]["blocks"] = [{"type": "kpis", "items": [{"n": f"{i}.800 €", "t": "a number"} for i in range(n)]}]
+        html, _, _ = slides.build_html(doc_of(desk, data), assets.template("slides-test"), assets.design())
+        return html.split('class="kpis" style="grid-template-columns:repeat(')[1].split(",")[0], html.count('class="kpi rs"')
+    assert columns(3) == ("3", 1) and columns(4) == ("2", 2) and columns(5) == ("3", 2) and columns(6) == ("3", 2)
+    assert columns(4, 1080, 1080) == ("2", 2) and columns(4, 1920, 1080) == ("4", 1)
+
+
+def test_missing_fonts_are_named_by_family_and_weight():
+    faces = [{"family": slides.ALIAS, "weight": "400", "local": ["House"], "ok": False},
+             {"family": slides.ALIAS, "weight": "700", "local": ["House-Bold"], "ok": False},
+             {"family": "House", "weight": "400", "local": ["House"], "ok": False},
+             {"family": "House", "weight": "700", "local": ["House-Bold"], "ok": False},
+             {"family": "House-Bold", "weight": "400 700", "local": ["House-Bold"], "ok": False},
+             {"family": "Serif Face", "weight": "400 700", "local": ["Serif Face"], "ok": False},
+             {"family": "Loaded", "weight": "400", "local": ["Loaded"], "ok": True}]
+    design = {"fonts": {"body": ["House", "sans-serif"], "heading": ["Inter Display", "sans-serif"]}}
+    fonts = {slides.ALIAS: False, "House": False, "Inter Display": False, "Helvetica": True}
+    assert slides.missing_typefaces(faces, fonts, design) == ["House 400", "House-Bold 700", "Serif Face", "Inter Display"]
+    assert slides.missing_typefaces([], {"Inter Display": True}, design) == []
+
+
+def test_bundle_steps_follow_the_language_and_the_slide_count():
+    v = dict(pdf="t_carousel.pdf", first="t_slide_1.png", last="t_slide_3.png", piece="p", chars=10, limit=3000, n=3,
+             template="x", design="y", at="2026-11-17")
+    de, en = post.steps("de", **v), post.steps("en", **v)
+    assert de.startswith("So wird der Beitrag gepostet") and "t_carousel.pdf" in de and "Zeichen" in de
+    assert en.startswith("How to post this") and post.steps("fr", **v) == en and post.steps(None, **v) == en
+    one = post.steps("de", **{**v, "pdf": None, "n": 1, "last": "t_slide_1.png"})
+    assert "Das Bild hinzufügen" in one and "Dokument" not in one
+
+
+@needs_browser
+def test_a_one_slide_deck_is_a_single_image(desk, capsys):
+    data = copy.deepcopy(DECK)
+    data["slides"] = data["slides"][:1]
+    doc_of(desk, data)
+    m = render.render("post", "slides-test", project=config.project(desk))
+    out = Path(m["folder"])
+    assert m["files"] == ["layout.json", "preview.json", "t.html", "t_slide_1.png"]          # no carousel PDF
+    assert 'class="pg"' not in (out / "t.html").read_text(encoding="utf-8")                # no page counter
+    assert json.loads((out / "preview.json").read_text(encoding="utf-8"))["document"] is None
+    assert not any("one slide" in w for w in post.check("post", config.project(desk))[1])
+    (desk / "pieces" / "post" / "piece.yaml").write_text(
+        (desk / "pieces" / "post" / "piece.yaml").read_text(encoding="utf-8").replace("lang: en", "lang: de"), encoding="utf-8")
+    data["deck"]["lang"] = "de"
+    doc_of(desk, data)
+    render.render("post", "slides-test", project=config.project(desk))
+    readme = (post.bundle("post", project=config.project(desk)) / "README.txt").read_text(encoding="utf-8")
+    assert readme.startswith("So wird der Beitrag gepostet") and "Das Bild hinzufügen: t_slide_1.png" in readme
+    assert capsys.readouterr().out.count("missing fonts") == 0                                # notes are printed by `sb render`, not here
+
+
+@needs_browser
+def test_a_grown_block_is_spread_and_an_empty_slide_is_reported(desk):
+    data = copy.deepcopy(DECK)
+    data["slides"][0]["blocks"] = [{"type": "bars", "grow": True, "name": "Two bars", "max": 20,
+                                    "rows": [{"label": "A", "value": 10, "hi": True}, {"label": "B", "value": 5}]}]
+    data["slides"].insert(1, {"title": "Little on this slide", "source": "@W-0001",
+                              "blocks": [{"type": "kpis", "items": [{"n": "1.800 €", "t": "one"}, {"n": "44 %", "t": "two"},
+                                                                    {"n": "540 €", "t": "three"}, {"n": "300 €", "t": "four"}]}]})
+    doc_of(desk, data)
+    m = render.render("post", "slides-test", project=config.project(desk))
+    layout = json.loads((Path(m["folder"]) / "layout.json").read_text(encoding="utf-8"))
+    assert layout["problems"] == []
+    assert any(r["slide"] == 1 and "spread over the height" in r["what"] for r in layout["remedies"])
+    page = (Path(m["folder"]) / "t.html").read_text(encoding="utf-8")
+    assert 'class="track" style="height:' in page                                        # bars got thicker
+    # two bars cannot fill a slide even when grown (the limits leave space); the kpis and the sources slide are thin too
+    assert [w["slide"] for w in layout["warnings"]] == [1, 2, 3]
+    assert all("% of the content area is empty" in w["what"] for w in layout["warnings"])
+    assert any(n.startswith("slide 2: about ") for n in m["notes"])

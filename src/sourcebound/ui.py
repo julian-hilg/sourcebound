@@ -224,7 +224,7 @@ def detail(pid: str) -> dict:
             "claim_list": json.loads(json.dumps(L["claims"], default=str)),
             "source_list": json.loads(json.dumps(L["sources"], default=str)),
             "result_list": [{"key": k, **{x: v.get(x) for x in ("value", "display", "unit", "ci", "hypothesis", "note")},
-                             **{x: (v.get("provenance") or {}).get(x) for x in ("script", "git", "data", "at")}}
+                             **{x: (v.get("provenance") or {}).get(x) for x in ("script", "git", "data", "sources", "at")}}
                             for k, v in sorted(results.load(p).items())],
             "result_problems": {"errors": errs, "warnings": warns},
             "documents": _documents(p.root), "log": log, "deliverable_folders": folders,
@@ -364,8 +364,8 @@ def piece(pid: str, body: dict) -> dict:
     if op == "restore":
         return {"piece": pieces.restore(piece_id, p)}
     if op == "check":
-        errs, warns = pieces.check(piece_id, p)
-        return {"id": piece_id, "errors": errs, "warnings": warns}
+        found = pieces.findings(piece_id, p)
+        return {"id": piece_id, "errors": found["errors"], "warnings": found["warnings"], "info": found["info"]}
     if op == "render":
         try:
             return {"render": render.render(piece_id, str(body.get("template") or ""), design_id=body.get("design") or None, project=p)}

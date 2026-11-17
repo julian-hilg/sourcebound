@@ -85,9 +85,15 @@ def _save(project: config.Project, piece_id: str, meta: dict) -> None:
     config.write_atomic(f, HEADER + yaml.safe_dump(body, sort_keys=False, allow_unicode=True, width=100))
 
 
-def _slug(title: str, taken: set[str]) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", title.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")).strip("-")[:40].strip("-") or "piece"
-    base = f"{date.today():%Y%m%d}-{base}"
+def _slug(title: str, taken: set[str], width: int = 28) -> str:
+    """Date and the title's first words, cut at a word boundary (about `width` characters)."""
+    words = re.sub(r"[^a-z0-9]+", "-", title.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")).strip("-").split("-")
+    base = words[0][:width]
+    for w in words[1:]:
+        if len(base) + 1 + len(w) > width:
+            break
+        base += "-" + w
+    base = f"{date.today():%Y%m%d}-{base or 'piece'}"
     out, n = base, 1
     while out in taken:
         n += 1
@@ -111,13 +117,20 @@ def add(project: config.Project | None = None, *, piece_id: str | None = None, t
         today = date.today().isoformat()
         meta = {"title": new["title"], "kind": new.get("kind") or "post", "template": new.get("template", ""),
                 "design": new.get("design", ""), "status": new.get("status") or "idea", "lang": new.get("lang") or p.lang,
-                "channel": new.get("channel", ""), "note": new.get("note", ""), "prompt": new.get("prompt", ""),
+                "channel": new.get("channel") or _one_channel(p), "note": new.get("note", ""), "prompt": new.get("prompt", ""),
                 "created": today, "updated": today}
         _save(p, pid, meta)
         tf = folder(p, pid) / "text.md"
         if not tf.exists():
             tf.write_text(text if text is not None else "", encoding="utf-8")
     return get(pid, p)
+
+
+def _one_channel(project: config.Project) -> str:
+    """The desk's channel when `project.yaml` names exactly one, else ''."""
+    ch = project.meta.get("channels") or []
+    ch = [ch] if isinstance(ch, str) else ch
+    return str(ch[0]) if len(ch) == 1 else ""
 
 
 def update(piece_id: str, project: config.Project | None = None, *, text: str | None = None, **fields) -> tuple[dict, dict]:
@@ -175,15 +188,129 @@ def due(project: config.Project | None = None, *, now: datetime | None = None) -
     return sorted(rows, key=lambda x: str(x["scheduled_at"]))
 
 
-def check(piece_id: str, project: config.Project | None = None) -> tuple[list[str], list[str]]:
-    """(errors, warnings): sources and results the text refers to, numbers typed by hand, stale renders."""
-    from . import deliverable, render
+# ------------------------------------------------------------------ numbers typed by hand
+# A number in a piece is a recorded result ({{result:key}}) or a quoted one, with its source
+# cited in the same sentence.  Counted as a number: a decimal, a percentage, an integer with a
+# thousands separator, any number with a currency, unit or scale (€, Mio., bn, x), and a bare
+# integer of three or more digits.  Not counted: years, dates and times, paragraph and page
+# numbers (§ 34f, Art. 6, S. 3), ids, hashtags, file names, and the conventional levels
+# 1, 5, 10, 90, 95 and 99 per cent.
+_UNIT = (r"%|Prozentpunkte?|Prozent|per\s?cent|percent|pp|bp|bps|Basispunkte?|€|\$|£|EUR|USD|GBP|CHF|Euro|Dollar"
+         r"|Mio\.?|Mrd\.?|Bio\.?|Tsd\.?|Millionen|Million|Milliarden|Milliarde|millions?|billions?|thousand|trillion"
+         r"|bn|mn|tn|k|m|km|kg|t|[kMGT]Wh|[kMG]W|x|×|-?fache[nmr]?|-?fach|-mal")
+_NUMBER_IN_PIECE = re.compile(
+    r"(?<![\w.,])(?P<pre>(?:[€$£]|EUR|USD|GBP|CHF)\s?)?"
+    r"(?P<num>\d{1,3}(?:[.,  ]\d{3})+(?:[.,]\d+)?|\d+[.,]\d+|\d+)"
+    rf"(?P<unit>\s?(?:{_UNIT}))?(?![\w])", re.IGNORECASE)
+_PERCENT = re.compile(r"\s?(?:%|prozent|per\s?cent|percent)", re.IGNORECASE)
+_NOT_A_NUMBER = re.compile("|".join([
+    r"\{\{[^}]*\}\}",                                       # {{result:key}}, {{table:...}}
+    r"\[[^\]]*@[^\]]*\]", r"(?<![\w@])@[A-Za-z][\w:.-]*\w",  # citations, with their page numbers
+    r"\]\([^)]*\)", r"<[^>]*>", r"`[^`]*`", r"https?://\S+",  # link targets, tags, code, URLs
+    r"(?<!\w)#\w+",                                          # hashtags
+    r"\b[\w-]+\.(?:png|jpe?g|svg|gif|webp|pdf|csv|xlsx?|docx?|pptx?|ya?ml|json|md|html?)\b",
+    r"\b[A-Z]{1,4}-\d+\b",                                   # ids such as W-0001
+    r"§§?\s*\d+[a-z]*(?:\s*(?:Abs\.|Satz|Nr\.|S\.)\s*\d+[a-z]*)*",
+    r"\b(?:Art|Abs|Nr|Rn|Rz|Ziff|Kap|Abb|Tab|Fig|No|Vol|Bd|Anh|Anl|S|p|pp|KW|Q|H)\.?\s?\d+[a-z]?\b",
+    r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?\b",  # ISO dates and times
+    r"(?<![\d.,])\d{1,2}\.\s?\d{1,2}\.\s?(?:\d{4}|\d{2})(?!\d|[.,]\d)",  # 01.10.2026
+    r"(?<![\d.,])\d{1,2}/\d{1,2}/\d{2,4}(?!\d|[.,]\d)",
+    r"(?<![\d.,/])(?:0?[1-9]|1[0-2])[./](?:19|20)\d{2}(?!\d|[.,]\d)",  # 09.2025, 9/2025
+    r"(?<![\d.,])\d{1,2}:\d{2}(?!\d|[.,]\d)",                   # 08:30
+]))
+_LEVELS = {"1", "5", "10", "90", "95", "99"}
+_ABBREV = {"mio", "mrd", "bio", "tsd", "ca", "rd", "bzw", "vgl", "ggf", "inkl", "zzgl", "nr", "abs", "art", "ff",
+           "dr", "prof", "st", "jh", "mill", "etc", "vs", "approx", "no", "pp", "fig", "abb", "tab", "kap", "ziff",
+           "bd", "hrsg", "mr", "ms", "mrs", "jan", "feb", "mar", "apr", "aug", "sep", "sept", "okt", "oct", "nov", "dez", "dec",
+           "e.g", "i.e", "z.b", "u.a", "d.h", "o.ä", "u.ä", "s.o", "s.u"}
+_BLOCK = re.compile(r"\n[ \t]*\n|\n(?=[ \t]*(?:[-*+][ \t]|\d+\.[ \t]|#|\|))")
+
+
+def _masked(text: str) -> str:
+    return _NOT_A_NUMBER.sub(lambda m: " " * len(m.group()), text)
+
+
+def _sentences(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each sentence; a list item, a heading and a paragraph end one too."""
+    out, start = [], 0
+    for block in [*_BLOCK.finditer(text), None]:
+        stop = block.start() if block else len(text)
+        a = start
+        for m in re.finditer(r"[.!?][\"”’)]*\s+(?!\[@)", text[start:stop]):
+            end = start + m.start()
+            word = re.search(r"([\w.]*)$", text[a:end]).group(1).lower()
+            after = text[start + m.end(): start + m.end() + 1]
+            if (word in _ABBREV or len(word) == 1 or re.fullmatch(r"\d{1,2}", word)
+                    or (after and after.islower())):
+                continue
+            out.append((a, end + 1))
+            a = start + m.end()
+        out.append((a, stop))
+        start = block.end() if block else stop
+    return out
+
+
+def typed_numbers(text: str) -> list[dict]:
+    """Numbers written into a piece's text by hand: [{line, number, cited}], `cited` when the
+    sentence holding the number cites a source ([@W-0001], @key)."""
+    from .handover import MD_CITE
+    masked, out = _masked(text), []
+    spans = _sentences(text)
+    for m in _NUMBER_IN_PIECE.finditer(masked):
+        num, unit = m.group("num"), m.group("unit") or ""
+        if m.group("pre") or unit:
+            if _PERCENT.fullmatch(unit) and num in _LEVELS:
+                continue
+        elif not re.search(r"\d[.,  ]\d", num):        # a bare integer
+            if len(num) < 3 or num.startswith("0") or (len(num) == 4 and 1900 <= int(num) <= 2099):
+                continue
+        a, b = next(((a, b) for a, b in spans if a <= m.start() < max(b, a + 1)), (0, len(text)))
+        out.append({"line": text.count("\n", 0, m.start()) + 1, "number": m.group().strip(),
+                    "cited": bool(MD_CITE.search(text[a:b]))})
+    return out
+
+
+_SKIP_KEYS = {"type", "layout", "prefix", "lang", "id", "image", "art", "file", "src", "logo", "template", "design",
+              "url", "href", "date", "at"}
+
+
+def _strings(node, path: str = "", cited: bool = False):
+    """(path, text, cited) for every string in a data file; a mapping with a `source` that cites
+    something counts as cited for everything inside it (a slide and its source line)."""
+    from .handover import MD_CITE
+    if isinstance(node, dict):
+        cited = cited or any(MD_CITE.search(str(node.get(k) or "")) for k in ("source", "sources"))
+        for k, v in node.items():
+            if str(k) not in _SKIP_KEYS and k not in ("source", "sources"):
+                yield from _strings(v, f"{path}.{k}" if path else str(k), cited)
+    elif isinstance(node, list):
+        for i, v in enumerate(node, 1):
+            yield from _strings(v, f"{path}[{i}]", cited)
+    elif isinstance(node, str):
+        yield path, node, cited
+
+
+def _lines(hits: list[dict], limit: int = 8) -> str:
+    by: dict[int, list[str]] = {}
+    for h in hits:
+        by.setdefault(h["line"], []).append(h["number"])
+    rows = [f"{n} ({', '.join(v)})" for n, v in sorted(by.items())]
+    return ", ".join(rows[:limit]) + (f", and {len(rows) - limit} more" if len(rows) > limit else "")
+
+
+def findings(piece_id: str, project: config.Project | None = None) -> dict:
+    """{errors, warnings, info}: sources and results the piece refers to, numbers typed by hand
+    (with or without a citation in the same sentence), the sources a recorded result rests on,
+    stale renders."""
+    import json
+
+    from . import render
     p = project or config.project()
     doc = render.from_piece(p, piece_id)
-    errs, warns = [], []
-    import json
+    errs, warns, info = [], [], []
     body = doc.text + "\n" + json.dumps(doc.data, ensure_ascii=False)
-    for k in sorted({k.strip() for k in render.MD_RESULT.findall(body)} - set(doc.results)):
+    used = sorted({k.strip() for k in render.MD_RESULT.findall(body)})
+    for k in sorted(set(used) - set(doc.results)):
         errs.append(f"result {k} is used but not recorded")
     for k in render.cited(body):
         if re.fullmatch(r"W-\d{4}", k):
@@ -193,16 +320,49 @@ def check(piece_id: str, project: config.Project | None = None) -> tuple[list[st
             warns.append(f"citation key {k} is not in evidence/inbox.bib or a references.bib of this project")
     if not render.cited(body) and doc.text.strip():
         warns.append("the text cites no source: every substantive statement needs one ([@W-0001] or [@citekey])")
-    hits = deliverable.typed_numbers(doc.text, markdown=True)
-    if hits:
-        warns.append(f"{len(hits)} lines with a number typed by hand (lines {', '.join(str(n) for n, _ in hits[:6])}"
-                     f"{', ...' if len(hits) > 6 else ''}): record it and use {{{{result:key}}}}, or make sure its source is cited")
+    hits = typed_numbers(doc.text)
+    bare = [h for h in hits if not h["cited"]]
+    if bare:
+        warns.append(f"text.md: numbers typed by hand with no citation in the same sentence, lines {_lines(bare)}: "
+                     "record it and use {{result:key}}, or cite its source in that sentence")
+    if len(bare) < len(hits):
+        info.append(f"text.md: numbers quoted with a citation in the same sentence, lines {_lines([h for h in hits if h['cited']])}: "
+                    "confirm each against the source")
+    for stem, data in doc.data.items():
+        cited, bare = [], []
+        for path, text, ctx in _strings(data):
+            for h in typed_numbers(text):
+                (cited if h["cited"] or ctx else bare).append(f"{path} “{h['number']}”")
+        short = lambda xs: ", ".join(xs[:8]) + (f", and {len(xs) - 8} more" if len(xs) > 8 else "")
+        if bare:
+            warns.append(f"{stem}.yaml: numbers typed by hand with no citation (positions count from 1): {short(bare)}: "
+                         "use {{result:key}}, or cite the source in the text or in the slide's `source`")
+        if cited:
+            info.append(f"{stem}.yaml: numbers quoted under a citation: {short(cited)}: confirm each against the source")
+    title = lambda s: (doc.web_sources.get(s) or {}).get("title")
+    rest: dict[str, list[str]] = {}                 # what the results rest on -> the keys
+    for k in (k for k in used if k in doc.results):
+        prov = doc.results[k].get("provenance") or {}
+        on = [f"{s} ({title(s)})" if title(s) else s for s in prov.get("sources") or []]
+        on += [f"lake table {t}@{snap}" for t, snap in (prov.get("data") or {}).items()]
+        rest.setdefault(", ".join(on), []).append(k)
+    for on, keys in rest.items():
+        what = f"result {keys[0]}" if len(keys) == 1 else f"results {', '.join(keys)}"
+        info.append(f"{what} {'rests' if len(keys) == 1 else 'rest'} on {on}" if on else
+                    f"{what} {'names' if len(keys) == 1 else 'name'} no source and no lake table "
+                    "(results.record(..., sources=[\"W-0001\"]) says which source the inputs come from)")
     current = results.load(p)
     for m in render.renders(folder(p, piece_id) / "render"):
         changed = render.stale(m, current)
         if changed:
             warns.append(f"render {m['template']} shows older values of {', '.join(changed[:5])}: sb render {piece_id} --template {m['template']}")
-    return errs, warns
+    return {"errors": errs, "warnings": warns, "info": info}
+
+
+def check(piece_id: str, project: config.Project | None = None) -> tuple[list[str], list[str]]:
+    """(errors, warnings) of `findings`."""
+    f = findings(piece_id, project)
+    return f["errors"], f["warnings"]
 
 
 def summary(project: config.Project | None = None) -> list[dict]:

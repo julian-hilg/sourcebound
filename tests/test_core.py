@@ -1269,7 +1269,7 @@ def test_a_piece_from_a_local_document_to_rendered_text(desk, tmp_path, capsys):
     report = tmp_path / "Report 2024.txt"
     report.write_text("In June 2024 about 20 % of trading days saw a large move.\n", encoding="utf-8")
     main(["doc", str(report), "--title", "Report on returns", "--publisher", "Example Institute", "--date", "2024-11-18"])
-    assert "W-0001  Report 2024.txt" in capsys.readouterr().out
+    assert "W-0001  Report on returns (Example Institute)" in capsys.readouterr().out
     main(["source", "W-0001", "--grep", "20 %"])                  # the archived copy is what a verifier reads
     assert "about 20 % of trading days" in capsys.readouterr().out
     main(["piece", "add", "Grosse", "Bewegungen", "--kind", "post", "--id", "p1", "--template", "text"])
@@ -1278,7 +1278,8 @@ def test_a_piece_from_a_local_document_to_rendered_text(desk, tmp_path, capsys):
         "# Titel\n\nRund 20 % bewegten sich stark [@W-0001, S. 3]. Laut @W-0001 sind es **viele**; siehe {{result:x.n}} und [@W-0009].\n", encoding="utf-8")
     errs, warns = pieces.check("p1", p)
     assert errs == ["result x.n is used but not recorded", "source W-0009 is cited but not in evidence/sources.yaml (sb snap URL, or sb doc FILE)"]
-    assert any("typed by hand" in w for w in warns)
+    assert not any("typed by hand" in w for w in warns)         # the number is cited in its sentence
+    assert any("quoted with a citation in the same sentence, lines 3 (20 %)" in i for i in pieces.findings("p1", p)["info"])
     with pytest.raises(SystemExit):
         main(["piece", "check", "p1"])
     from sourcebound import results
@@ -1355,7 +1356,9 @@ def test_designs_templates_and_packs(hub, tmp_path):
     import shutil
     shutil.rmtree(config.hub().registry / "designs")
     shutil.rmtree(config.hub().registry / "templates")
-    assert assets.install_pack(pack) == {"designs": ["acme"], "templates": ["acme-post"]}
+    done = assets.install_pack(pack)
+    assert (done["designs"], done["templates"], done["replaced"]) == (["acme"], ["acme-post"], [])
+    assert done["pack"]["source"] == str(pack) and len(done["pack"]["sha256"]) == 64      # where it came from is recorded
     assert assets.design("acme")["colors"]["primary"] == "#223344" and (config.hub().registry / "templates" / "acme-post" / "note.txt").exists()
     with pytest.raises(FileNotFoundError, match="holds neither"):
         assets.install_pack(tmp_path)
@@ -1545,3 +1548,251 @@ def test_a_plugin_can_bring_a_pack(hub, tmp_path):
         assert assets.design("firm")["name"] == "Firm (this machine)"
     finally:
         plugins.load(fresh=True)
+
+
+# ----------------------------------------------------------------------------- reading registered sources
+def _tiny_docx(path):
+    """A Word file with a field code, a text box (choice + fallback), a table, a footnote, an endnote and an image."""
+    import zipfile
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    body = (
+        f'<?xml version="1.0"?><w:document {w}><w:body>'
+        '<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr>'
+        '<w:r><w:t>Abb. </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+        '<w:r><w:instrText xml:space="preserve"> SEQ Abbildung \\* ARABIC </w:instrText></w:r>'
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>'
+        '<w:r><w:t xml:space="preserve">: Assets &amp; savings</w:t></w:r>'
+        '<w:r><w:footnoteReference w:id="7"/></w:r></w:p>'
+        '<w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor>'
+        '<wp:positionH relativeFrom="column"><wp:posOffset>-1168404937125</wp:posOffset></wp:positionH>'
+        '<wps:txbx><w:txbxContent><w:p><w:r><w:t>Box text</w:t></w:r></w:p></w:txbxContent></wps:txbx>'
+        '</wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict><v:textbox><w:txbxContent><w:p><w:r><w:t>Box text</w:t></w:r></w:p>'
+        '</w:txbxContent></v:textbox></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>'
+        '<w:tbl><w:tblPr/><w:tr><w:tc><w:tcPr/><w:p><w:r><w:t>Year</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Share</w:t></w:r></w:p></w:tc></w:tr>'
+        '<w:tr><w:tc><w:p><w:r><w:t>2024</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>20 %</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        '<w:p><w:r><w:t>See also</w:t></w:r><w:r><w:endnoteReference w:id="2"/></w:r><w:r><w:delText>gone</w:delText></w:r></w:p>'
+        '</w:body></w:document>')
+    notes = (f'<w:footnotes {w}><w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>'
+             '<w:footnote w:id="7"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Source: Example statistics office, 2024.</w:t></w:r></w:p></w:footnote>'
+             '</w:footnotes>')
+    ends = f'<w:endnotes {w}><w:endnote w:id="2"><w:p><w:r><w:endnoteRef/></w:r><w:r><w:t>An endnote.</w:t></w:r></w:p></w:endnote></w:endnotes>'
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("word/document.xml", body)
+        z.writestr("word/footnotes.xml", notes)
+        z.writestr("word/endnotes.xml", ends)
+        z.writestr("word/media/image1.png", b"\x89PNG not really")
+    return path
+
+
+def test_word_text_drops_noise_and_keeps_notes_and_tables(tmp_path):
+    from sourcebound.cli_more import document_info, document_text
+    f = _tiny_docx(tmp_path / "r.docx")
+    text = document_text(f.read_bytes(), f.name)
+    assert "Abb. 1: Assets & savings[^1]" in text
+    for noise in ("SEQ", "ARABIC", "1168404937125", "gone"):
+        assert noise not in text
+    assert text.count("Box text") == 1
+    assert "Year | Share\n2024 | 20 %\n" in text
+    assert "See also[^E1]" in text
+    assert text.index("Footnotes\n[^1] Source: Example statistics office, 2024.") < text.index("Endnotes\n[^E1] An endnote.")
+    assert document_info(f.read_bytes(), f.name) == {"images": 1, "charts": 0}
+
+
+def test_slides_in_presentation_order(tmp_path):
+    import zipfile
+
+    from sourcebound.cli_more import document_text
+    f = tmp_path / "d.pptx"
+    slide = lambda t: f'<p:sld><a:p><a:r><a:t>{t}</a:t></a:r></a:p></p:sld>'
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("ppt/slides/slide2.xml", slide("second file"))
+        z.writestr("ppt/slides/slide10.xml", slide("tenth file"))
+        z.writestr("ppt/presentation.xml", '<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId3"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst></p:presentation>')
+        z.writestr("ppt/_rels/presentation.xml.rels", '<Relationships><Relationship Id="rId2" Type="x/slide" Target="slides/slide2.xml"/>'
+                   '<Relationship Id="rId3" Type="x/slide" Target="slides/slide10.xml"/></Relationships>')
+    assert document_text(f.read_bytes(), f.name) == "[slide 1]\ntenth file\n\n[slide 2]\nsecond file\n"
+
+
+def test_reading_a_long_source_says_what_is_cut_and_greps_merged(desk, tmp_path, capsys):
+    import re
+
+    from sourcebound.cli import main
+    report = tmp_path / "long.txt"
+    report.write_text(("word " * 1000) + "needle and needle again " + ("filler " * 200) + "needle at the end\n", encoding="utf-8")
+    main(["doc", str(report), "--title", "Long report"])
+    capsys.readouterr()
+    main(["source", "W-0001"])
+    out = capsys.readouterr().out
+    assert "W-0001  Long report\n" in out
+    assert re.search(r"word\n\n\.\.\. \(3,99\d of 6,\d{3} characters shown; --chars N for more, --chars 0 for all", out)   # ends on a word
+    main(["source", "W-0001", "--chars", "0"])
+    assert "needle at the end" in capsys.readouterr().out
+    main(["source", "W-0001", "--grep", "needle"])
+    out = capsys.readouterr().out
+    assert out.count('3 hits for "needle" in 2 passages') == 1
+    assert "[1] hits 1-2: ... " in out and "[2] hit 3: ... " in out and out.count("needle and needle again") == 1
+    dest = tmp_path / "all.txt"
+    main(["source", "W-0001", "--out", str(dest)])
+    assert "wrote" in capsys.readouterr().out and dest.read_text(encoding="utf-8") == report.read_text(encoding="utf-8")
+
+
+def test_the_same_document_keeps_its_id_and_its_name_can_be_corrected(desk, tmp_path, capsys):
+    from sourcebound import ledger
+    from sourcebound.cli import main
+    f = _tiny_docx(tmp_path / "Report 2024.docx")
+    main(["doc", str(f), "--title", "Annual report", "--publisher", "Example Institute"])
+    assert "W-0001  Annual report (Example Institute)\n      file Report 2024.docx" in capsys.readouterr().out
+    head = (desk / "evidence" / "sources.yaml").read_text(encoding="utf-8").splitlines()[0]
+    main(["doc", str(f), "--title", "Same bytes"])
+    assert "already registered as W-0001  Annual report (Example Institute)" in capsys.readouterr().out
+    assert [s["id"] for s in ledger.load()["sources"]] == ["W-0001"]
+    main(["doc", str(f), "--title", "On purpose", "--new"])
+    assert [s["id"] for s in ledger.load()["sources"]] == ["W-0001", "W-0002"]
+    main(["source", "set", "W-0001", "--publisher", "Example Institute e.V."])
+    assert "publisher: Example Institute -> Example Institute e.V." in capsys.readouterr().out
+    s = ledger.load()["sources"][0]
+    assert (s["title"], s["publisher"], s["file"]) == ("Annual report", "Example Institute e.V.", "Report 2024.docx")
+    assert (desk / "evidence" / "sources.yaml").read_text(encoding="utf-8").splitlines()[0] == head   # comment kept
+    main(["source", "W-0001"])
+    out = capsys.readouterr().out
+    assert out.startswith("W-0001  Annual report (Example Institute e.V.)\n      file Report 2024.docx")
+    assert "1 image not read (charts and figures are not text)" in out and "Footnotes\n[^1] Source:" in out
+    for bad in (["source", "set", "W-0009", "--title", "x"], ["source", "set", "W-0001"], ["source", "W-0001", "--title", "x"]):
+        with pytest.raises(SystemExit):
+            main(bad)
+
+
+def test_new_maps_hyphens_and_a_desk_ignores_heavy_renders(hub, capsys):
+    import subprocess
+
+    from sourcebound.cli import main
+    main(["new", "my-desk", "--title", "Hyphens", "--kind", "desk"])
+    assert "slug my_desk (hyphens become underscores)" in capsys.readouterr().out
+    d = hub / "my_desk"
+    assert yaml.safe_load((d / "project.yaml").read_text(encoding="utf-8"))["slug"] == "my_desk"
+    r = d / "pieces" / "p1" / "render" / "deck"
+    (r / "post").mkdir(parents=True)
+    for name in ("deck_slide_1.png", "deck.pdf", "deck.html", "post/deck_slide_1.png", "render.json", "preview.json", "layout.json"):
+        (r / name).write_text("x", encoding="utf-8")
+    ignored = lambda f: subprocess.run(["git", "check-ignore", "-q", f"pieces/p1/render/deck/{f}"], cwd=d).returncode == 0
+    assert [ignored(f) for f in ("deck_slide_1.png", "deck.pdf", "deck.html", "post/deck_slide_1.png")] == [True] * 4
+    assert [ignored(f) for f in ("render.json", "preview.json", "layout.json")] == [False] * 3
+
+
+# The texts of three test posts (company names replaced), for the number rule of pieces.
+_POST_AVD = """Ab 2027 legt der Staat im neuen Altersvorsorgedepot auf die ersten 360 € Eigenbeitrag 50 % drauf [@W-0001].
+
+Das Altersvorsorgedepot ersetzt die Riester-Rente. Bundestag und Bundesrat haben die Reform im Mai 2026 beschlossen; neue Riester-Verträge gibt es ab 2027 nicht mehr, bestehende laufen weiter [@W-0001].
+
+Die Regeln, wie sie unsere Marktübersicht zusammenfasst:
+
+- Gefördert werden Eigenbeiträge von 120 € bis 1.800 € im Jahr [@W-0001].
+- Die Grundzulage beträgt 50 % auf die ersten 360 € und 25 % auf den Teil bis 1.800 €, zusammen höchstens 540 € im Jahr [@W-0001].
+- Je Kind kommt 1 € Zulage je eingezahltem Euro dazu, höchstens 300 € im Jahr [@W-0001].
+- Jeder Anbieter muss ein Standarddepot anbieten oder auf das eines Partners verweisen; dessen Effektivkosten sind auf 1,0 % begrenzt [@W-0001].
+
+Was das heißt, in eigener Rechnung: Bei 1.000 € Eigenbeitrag im Jahr beträgt die Grundzulage {{result:avd.zulage_1000}} €, eine Förderquote von {{result:avd.quote_1000}}. Beim Höchstbeitrag sind es {{result:avd.zulage_1800}} € oder {{result:avd.quote_1800}}. Mit einem Kind steigt die Quote beim Höchstbeitrag auf {{result:avd.quote_1800_kind}}.
+
+Anders als bei Riester gibt es Varianten ohne Beitragsgarantie [@W-0001]. Das öffnet nach unserer Einschätzung einen neuen Massenmarkt für günstige Fonds- und ETF-Portfolios [@W-0001].
+
+#Altersvorsorge #ETF #Fonds
+"""
+_POST_SELF = """Von 37,2 Mio. Wertpapierdepots in Deutschland lagen Ende 2025 16,2 Mio. bei Online-, Direkt- und Neobrokern [@W-0001]. Das sind {{result:se.anteil_online}} (eigene Rechnung).
+
+Dazu passt eine zweite Zahl: Rund 5,8 Mio. ETF-Sparpläne werden pro Monat ausgeführt [@W-0001].
+
+Wie schnell einzelne Anbieter wachsen, zeigt ein Neobroker. Nach Unternehmensangaben hatte der Broker 2021 rund 1 Mio. Kunden und 6 Mrd. € Kundengelder, im September 2025 europaweit rund 10 Mio. Kunden und 150 Mrd. € [@W-0001]. Das ist das {{result:se.tr_faktor_kunden}}-Fache bei den Kunden und das {{result:se.tr_faktor_gelder}}-Fache bei den Kundengeldern (eigene Rechnung). Die Zahlen gelten für ganz Europa und lassen sich nicht mit dem deutschen Markt gleichsetzen [@W-0001].
+
+Für Produktanbieter heißt das: Ein wachsender Teil der Anleger entscheidet selbst, per App und Sparplan. Wer nur über Berater und Filialen vertreibt, erreicht diesen Teil nicht. Das ist unsere Einordnung.
+
+#ETF #Neobroker #Sparplan
+"""
+_POST_AGENTS = """Auf einen Honorar-Finanzanlagenberater kommen in Deutschland rund {{result:verm.34f_je_34h}} Finanzanlagenvermittler (eigene Rechnung nach [@W-0001]).
+
+Die Zahlen hinter dem Verhältnis:
+
+- 41.499 Selbstständige haben eine eigene Erlaubnis nach § 34f GewO (Register, Stand 01.10.2026) [@W-0001]. Sie dürfen nur Fonds und Vermögensanlagen vermitteln, keine Einzelaktien, und werden von IHK oder Gewerbeamt beaufsichtigt, nicht von der BaFin [@W-0001].
+- 396 Honorar-Finanzanlagenberater arbeiten nach § 34h GewO [@W-0001]. Sie werden, bis auf enge Ausnahmen, von ihren Kunden bezahlt statt von Produktanbietern [@W-0002].
+- 16.211 Selbstständige ohne eigene Erlaubnis arbeiten als gebundene Vermittler unter 139 Haftungsdächern [@W-0001]. Das haftende Institut trägt die Verantwortung für sie [@W-0002].
+
+Ein Haftungsdach betreut damit im Schnitt rund {{result:verm.gebunden_je_dach}} gebundene Vermittler (eigene Rechnung).
+
+#Finanzvertrieb #Fonds #Vermittler
+"""
+
+
+def test_numbers_in_a_piece_with_units_and_citations():
+    from sourcebound.pieces import typed_numbers
+    got = lambda t: [(h["line"], h["number"], h["cited"]) for h in typed_numbers(t)]
+    avd = got(_POST_AVD)
+    assert [x for x in avd if not x[2]] == [(12, "1.000 €", False)]          # the input of the own calculation
+    assert {n for n, _, _ in avd} == {1, 7, 8, 9, 10, 12}
+    assert (9, "1 €", True) in avd and (10, "1,0 %", True) in avd and not any("2027" in x[1] or "2026" in x[1] for x in avd)
+    self_ = got(_POST_SELF)
+    assert {x[1] for x in self_} == {"37,2 Mio.", "16,2 Mio.", "5,8 Mio.", "1 Mio.", "6 Mrd.", "10 Mio.", "150 Mrd."}
+    assert all(c for _, _, c in self_)                                    # "Mio. Kunden" does not end the sentence
+    agents = got(_POST_AGENTS)
+    assert agents == [(5, "41.499", True), (6, "396", True), (7, "16.211", True), (7, "139", True)]
+    quiet = ("Am 01.10.2026 um 08:30 Uhr, seit 09.2025, am 2026-11-17, im 3. Quartal 2025, nach § 34f und Art. 6, "
+             "siehe [@W-0001, S. 120]; 95 % Konfidenz; #ETF2027; W-0001; Datei cover_1080.png; 12 Monate; Stand 01.10.2026, neu.")
+    assert got(quiet) == []
+    assert got("Es sind 44 % der Depots. Das steht in [@W-0001].\nRund 1 Mio. Kunden kamen dazu [@W-0001].") == [
+        (1, "44 %", False), (2, "1 Mio.", True)]
+
+
+def test_piece_check_reads_slides_and_names_the_sources_of_results(desk, tmp_path, capfd):
+    from sourcebound import config, pieces, results
+    from sourcebound.cli import main
+    report = tmp_path / "report.txt"
+    report.write_text("Ein Report mit 540 € und 41.499 Personen.\n", encoding="utf-8")
+    main(["doc", str(report), "--title", "Report on agents"])
+    (desk / "analysis" / "a.py").write_text(
+        "from sourcebound import results\n"
+        "results.record('x.n', 7, sources=['W-0001'])\n"
+        "results.record('x.m', 3, sources='W-0009')\n", encoding="utf-8")
+    (desk / "analysis" / "b.py").write_text(
+        "from sourcebound import results\nfor i in range(22):\n    results.record(f'k.{i:02d}', i, fmt='pct0')\n", encoding="utf-8")
+    capfd.readouterr()
+    main(["run", "analysis"])
+    run = capfd.readouterr()
+    assert "== analysis/a.py\n   x.m = 3\n   x.n = 7\n== analysis/b.py\n   k.00 = 0 %\n" in run.out
+    assert "   k.19 = 1.900 %\n   … 2 more" in run.out and "k.20" not in run.out
+    assert "result x.m: source W-0009 is not registered" in run.err
+    p = config.project()
+    assert results.load(p)["x.n"]["provenance"]["sources"] == ["W-0001"]
+    warns = results.problems(p)[1]
+    assert not any("no lake table" in w and "x.n" in w for w in warns)
+    assert any("result x.m rests on source W-0009, which is not registered" in w for w in warns)
+    pieces.add(p, piece_id="p1", title="Vermittler", text="Rund {{result:x.n}} Vermittler je Dach [@W-0001]. Es gibt 396 Berater.\n")
+    (desk / "pieces" / "p1" / "slides.yaml").write_text(yaml.safe_dump({"slides": [
+        {"title": "Vier Zahlen", "blocks": [{"type": "kpis", "items": [{"n": "540 €", "t": "höchste Zulage"}]}]},
+        {"title": "Mit Quelle", "blocks": [{"type": "bars", "rows": [{"label": "§ 34f", "text": "41.499"}]}], "source": "[@W-0001]"},
+    ]}, allow_unicode=True), encoding="utf-8")
+    f = pieces.findings("p1", p)
+    assert f["errors"] == []
+    assert "text.md: numbers typed by hand with no citation in the same sentence, lines 1 (396)" in "\n".join(f["warnings"])
+    assert "slides.yaml: numbers typed by hand with no citation (positions count from 1): slides[1].blocks[1].items[1].n “540 €”" in "\n".join(f["warnings"])
+    assert any("slides.yaml: numbers quoted under a citation: slides[2].blocks[1].rows[1].text “41.499”" in i for i in f["info"])
+    assert "result x.n rests on W-0001 (Report on agents)" in f["info"]
+    with pytest.raises(SystemExit):                  # warnings only: exit 0
+        main(["piece", "check", "p1"])
+    assert "info:    p1: result x.n rests on W-0001" in capfd.readouterr().out
+
+
+def test_desk_status_piece_ids_and_the_one_channel(desk, capsys):
+    from sourcebound import config, pieces
+    from sourcebound.cli import main
+    card = desk / "project.yaml"
+    card.write_text(card.read_text(encoding="utf-8").replace("channels: []", "channels: [linkedin]")
+                    .replace('topic: ""', 'topic: "Fonds und ETFs in Deutschland"'), encoding="utf-8")
+    p = config.project()
+    a = pieces.add(p, title="Altersvorsorgedepot: bis zu 50 % Zulage ab 2027")
+    assert a["id"].split("-", 1)[1] == "altersvorsorgedepot-bis-zu" and a["channel"] == "linkedin"
+    b = pieces.add(p, title="Donaudampfschifffahrtsgesellschaftskapitaen erzaehlt", channel="newsletter")
+    assert len(b["id"].split("-", 1)[1]) == 28 and b["channel"] == "newsletter"
+    pieces.update(b["id"], p, status="review")
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "topic:   Fonds und ETFs in Deutschland\nchannels: linkedin\nsources: 0 registered" in out
+    assert "pieces:  2 (idea 1, review 1)" in out and "results: 0 recorded" in out
+    assert "pre-registration" not in out and "claims:" not in out

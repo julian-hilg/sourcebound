@@ -62,8 +62,9 @@ the lighter paradigm for desks (section 1 there): no hypotheses to freeze, no pa
    page with `sb snap URL --title "..."`; bring in a report or any local file with
    `sb doc FILE --title "..."`. Both give an id (`W-0001`) to cite.
 2. **Count.** A number that comes from data is recorded by a script in `analysis/` with
-   `sourcebound.results.record(...)` and used as `{{{{result:key}}}}`. A number quoted from a source
-   is written out with its citation next to it.
+   `sourcebound.results.record(...)` and used as `{{{{result:key}}}}`; computed from figures of a
+   registered document, it names it: `record(..., sources=["W-0001"])`. A number quoted from a
+   source is written out with its citation in the same sentence.
 3. **Write a piece.** `sb piece add "Title" --kind post --template ID`; the text goes into
    `pieces/<id>/text.md`, structured content a template needs (e.g. `slides.yaml`) next to it.
 4. **Check.** `sb piece check <id>`: every cited source registered, every result recorded.
@@ -83,6 +84,11 @@ the lighter paradigm for desks (section 1 there): no hypotheses to freeze, no pa
 | `log.md` | decisions, newest at the bottom |
 """
 
+# Rendered files are large and are made again by `sb render`; every render would add a copy to
+# git. The manifests stay tracked: render.json (what was shown), preview.json, layout.json.
+RENDER_IGNORE = ("# renders: sb render makes them again; the manifests (render.json, preview.json, layout.json) stay tracked\n"
+                 + "".join(f"pieces/*/render/**/*.{x}\n" for x in ("png", "pdf", "html", "docx", "pptx")))
+
 FILES = {
     "evidence/sources.yaml": "# Sources outside Zotero. Add with `sb snap URL --title ...` (a web page) or `sb doc FILE --title ...` (a document).\nsources: []\n",
     "evidence/claims.yaml": "# Optional claim ledger: statements this desk uses again and again, each with its evidence.\nclaims: []\n",
@@ -90,7 +96,7 @@ FILES = {
     "research/notes/README.md": "Findings, one file per sub-topic or date. Every statement names its source (`W-0001`, a citation key, `R:key`).\n",
     "analysis/README.md": "Scripts that record numbers with `sourcebound.results.record`. Run them with `sb run analysis`.\n",
     "pieces/README.md": "One folder per piece (`sb piece add`). `render/` inside a piece is written by `sb render`.\n",
-    ".gitignore": "__pycache__/\n*.pyc\n.DS_Store\nThumbs.db\n~$*\ndist/\npieces/.removed/\npieces/.ids.lock\n",
+    ".gitignore": "__pycache__/\n*.pyc\n.DS_Store\nThumbs.db\n~$*\ndist/\npieces/.removed/\npieces/.ids.lock\n" + RENDER_IGNORE,
 }
 
 

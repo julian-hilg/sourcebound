@@ -99,6 +99,27 @@ def resolve(data: dict, doc) -> dict:
     return _walk(copy.deepcopy(data), text)
 
 
+# Spaces that must not break a line: after a paragraph or article sign, and between a number
+# and its unit ("§ 34h", "Art. 5", "1.800 €", "44 %", "5 Mrd. €", "EUR 20").
+NBSP = " "
+_SP = r"[ \t ]+"
+_UNIT = r"(?:%|‰|€|\$|£|¥|EUR|USD|GBP|CHF|JPY|Euro|Prozent|Mrd\.?|Mio\.?|Tsd\.?|Bio\.?|bn|mn|tn|pp|Pp\.|bp|Bp\.)(?![\w])"
+_KEEP = [
+    (re.compile(r"(?<![\w.])(§§?|Art\.|Abs\.|Nr\.)" + _SP + r"(?=\S)"), r"\1" + NBSP),
+    (re.compile(r"(\d)" + _SP + r"(?=" + _UNIT + ")"), r"\1" + NBSP),
+    (re.compile(r"(?<![\w])(Mrd\.|Mio\.|Tsd\.|Bio\.|bn|mn|tn)" + _SP + r"(?=(?:€|\$|£|EUR|USD|GBP|CHF|Euro)(?![\w]))"), r"\1" + NBSP),
+    (re.compile(r"(?<![\w])(€|\$|£|EUR|USD|GBP|CHF)" + _SP + r"(?=[\d+\-−])"), r"\1" + NBSP),
+]
+_NOT_TEXT = NUMERIC | {"type", "layout", "lang", "prefix", "align", "pct", "points"}
+
+
+def keep_together(s: str) -> str:
+    """`s` with non-breaking spaces where a line break would split a reference or an amount."""
+    for pattern, repl in _KEEP:
+        s = pattern.sub(repl, s)
+    return s
+
+
 def _num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -240,7 +261,7 @@ def _pct(v: float) -> float:
 
 def prepare(data: dict, doc, template: dict, design: dict | None = None) -> dict:
     """The deck as the template takes it: resolved, with defaults and chart geometry."""
-    solved = resolve(data, doc)
+    solved = _walk(resolve(data, doc), lambda v, k: keep_together(v) if isinstance(v, str) and k not in _NOT_TEXT else v)
     deck = {"title": doc.title, "lang": doc.lang, **(solved.get("deck") or {})}
     deck.setdefault("tracker", deck["title"])
     deck["width"] = int(deck.get("width") or template.get("width") or 1080)

@@ -21,8 +21,9 @@ the text; you adjudicate it. Read the hub `AGENTS.md` section 2 first.
    - results: compare with `results/results.json` (value, unit, sign, rounding); a number in
      the text that is not a `\result{}` / `{{result:}}` is "no evidence" unless it is a
      threshold or a quoted figure with its own source (`sb check` lists such lines);
-   - web sources: `sb source W-0003 --grep "<words>"` prints the archived snapshot; fetch
-     the URL only if no snapshot exists, and say so;
+   - web sources and documents: `sb source W-0003 --grep "<words>"` prints the passages of the
+     archived copy (`--out FILE` writes the whole text); fetch the URL only if no snapshot
+     exists, and say so;
    - literature: `sb source <citekey> --grep "<words>"` or `--page N` (the paper store; run
      `sb papers sync` first if the key is not there), else the publisher page; check the page/quote
      given in the ledger;

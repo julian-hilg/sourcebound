@@ -2,6 +2,7 @@
 
   sb new SLUG --title "..." --kind desk      ongoing research on a topic (pieces instead of a paper)
   sb doc FILE --title "..." [--publisher P]  register a local document as a source (W-xxxx), archived
+                                             (the same bytes again: the id they have; --new forces a new one)
   sb piece list | add "TITLE" [--kind K] [--template ID] [--id ID] | show ID | check [ID]
   sb piece set ID [--title ..] [--status ..] [--template ..] [--at "2026-11-20 08:30"] ...
   sb piece rm ID | due                       remove (kept in pieces/.removed) | what is scheduled and due
@@ -31,19 +32,137 @@ def _fail(e: Exception):
     sys.exit(str(e).strip("'\""))
 
 
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".emf", ".wmf", ".svg", ".webp"}
+
+
+def _ooxml_text(xml: str, ns: str, notes: dict | None = None) -> str:
+    """Text of one WordprocessingML (`ns` "w") or DrawingML (`ns` "a") part.
+
+    Only text runs (`<w:t>`, `<a:t>`) count, so field codes (`w:instrText`), deleted text,
+    drawing offsets and other attribute-like content stay out.  `mc:Fallback` (the old copy
+    of a text box) is dropped first, so a text box appears once.  A table cell ends with
+    " | ", so a row stays on one line.  Footnote and endnote references become `[^1]`,
+    `[^E1]`, numbered in the order they appear (`notes` collects the numbers).
+    """
+    import html as htmlmod
+    import re
+    while True:                                         # innermost first, so nested fallbacks go too
+        xml, n = re.subn(r"(?s)<mc:Fallback\b[^>]*>(?:(?!<mc:Fallback\b).)*?</mc:Fallback>", "", xml)
+        if not n:
+            break
+    xml = re.sub(r"(?s)<w:tabs>.*?</w:tabs>", "", xml)  # tab stops of a paragraph, not tabs in the text
+    tok = re.compile(
+        rf"<{ns}:t(?:\s[^>]*)?>(?P<t>.*?)</{ns}:t>|<(?P<tc>/?){ns}:tc(?=[\s>])[^>]*?(?P<tcself>/?)>|</{ns}:tr>(?P<tr>)"
+        rf"|</{ns}:p>(?P<p>)|<{ns}:(?P<br>br|cr|tab)\b[^>]*/>|<w:noBreakHyphen\s*/>(?P<hy>)"
+        r'|<w:(?P<note>footnote|endnote)Reference\b[^>]*?w:id="(?P<nid>-?\d+)"[^>]*/>', re.S)
+    out, depth = [], 0
+    for m in tok.finditer(xml):
+        if m.group("t") is not None:
+            out.append(htmlmod.unescape(m.group("t")))
+        elif m.group("tc") is not None:
+            if m.group("tc"):                           # </w:tc>
+                depth = max(0, depth - 1)
+                out.append("\x00")
+            elif not m.group("tcself"):
+                depth += 1
+            else:
+                out.append("\x00")
+        elif m.group("tr") is not None:
+            out.append("\x02" if depth else "\x01")    # a row of a table inside a cell, or of a table
+        elif m.group("p") is not None:
+            out.append(" " if depth else "\n")
+        elif m.group("br"):
+            out.append("\t" if m.group("br") == "tab" else (" " if depth else "\n"))
+        elif m.group("hy") is not None:
+            out.append("-")
+        elif m.group("note"):
+            kind, nid = m.group("note"), m.group("nid")
+            seen = (notes if notes is not None else {}).setdefault(kind, {})
+            seen.setdefault(nid, len(seen) + 1)
+            out.append(f"[^{'E' if kind == 'endnote' else ''}{seen[nid]}]")
+    t = "".join(out)
+    t = re.sub(r"(?:[ \t]*\x00)*[ \t]*\x02", " ; ", t)      # empty cells at a row's end say nothing
+    t = re.sub(r"(?:[ \t]*\x00)*[ \t]*\x01", "\n", t)
+    t = re.sub(r"[ \t]*\x00[ \t]*", " | ", t)
+    t = re.sub(r"[ \t]{2,}", " ", re.sub(r"[ \t]+\n", "\n", t))
+    return re.sub(r"\n{3,}", "\n\n", t)
+
+
+def _word_notes(xml: str, kind: str, numbers: dict) -> list[str]:
+    """Lines `[^1] text` of word/footnotes.xml or word/endnotes.xml, numbered as referenced in the body."""
+    import re
+    mark = "E" if kind == "endnote" else ""
+    rows = []
+    for m in re.finditer(rf"(?s)<w:{kind}\b([^>]*)>(.*?)</w:{kind}>", xml):
+        if re.search(r'\bw:type="', m.group(1)):        # separator lines, not notes
+            continue
+        nid = (re.search(r'\bw:id="(-?\d+)"', m.group(1)) or [None, "?"])[1]
+        text = re.sub(r"\s*\n\s*", " ", _ooxml_text(m.group(2), "w")).strip()
+        if text:
+            numbers.setdefault(nid, len(numbers) + 1)
+            rows.append((numbers[nid], f"[^{mark}{numbers[nid]}] {text}"))
+    return [r for _, r in sorted(rows)]
+
+
+def _slide_order(z) -> list[str]:
+    """Slide parts in presentation order (presentation.xml), else by number."""
+    import re
+    names = set(z.namelist())
+    slides = sorted((n for n in names if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+                    key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)))
+    try:
+        rels = z.read("ppt/_rels/presentation.xml.rels").decode("utf-8", errors="replace")
+        target = {m.group(1): "ppt/" + m.group(2).lstrip("/").removeprefix("ppt/") for m in
+                  re.finditer(r'<Relationship\b[^>]*?Id="([^"]+)"[^>]*?Target="([^"]+)"', rels)}
+        pres = z.read("ppt/presentation.xml").decode("utf-8", errors="replace")
+        order = [target.get(r) for r in re.findall(r'<p:sldId\b[^>]*?r:id="([^"]+)"', pres)]
+        order = [n for n in order if n in names]
+        return order + [n for n in slides if n not in order] if order else slides
+    except KeyError:
+        return slides
+
+
+def document_info(body: bytes, name: str) -> dict:
+    """What a document holds that its text does not show: {"images": n, "charts": n}."""
+    import io
+    import re
+    import zipfile
+    if Path(name).suffix.lower() not in {".docx", ".pptx"}:
+        return {"images": 0, "charts": 0}
+    try:
+        with zipfile.ZipFile(io.BytesIO(body)) as z:
+            names = [n for n in z.namelist() if not n.endswith("/")]
+    except zipfile.BadZipFile:
+        return {"images": 0, "charts": 0}
+    return {"images": sum(1 for n in names if re.match(r"(word|ppt)/media/", n) and Path(n).suffix.lower() in IMAGE_EXT),
+            "charts": sum(1 for n in names if re.fullmatch(r"(word|ppt)/charts/chart\d+\.xml", n))}
+
+
 def document_text(body: bytes, name: str) -> str:
-    """Readable text of an archived document, by its file name (docx, pptx, html, text)."""
+    """Readable text of an archived document, by its file name (docx, pptx, html, text).
+
+    Word: the body, then footnotes and endnotes under a heading line, numbered as in the body
+    (`[^1]`).  PowerPoint: the slides in presentation order, each under `[slide N]`.
+    """
     import html as htmlmod
     import io
     import re
     import zipfile
     suffix = Path(name).suffix.lower()
-    if suffix in {".docx", ".pptx"}:
+    if suffix == ".docx":
         with zipfile.ZipFile(io.BytesIO(body)) as z:
-            parts = [n for n in z.namelist() if re.fullmatch(r"word/document\.xml|ppt/slides/slide\d+\.xml", n)]
-            xml = "\n".join(z.read(n).decode("utf-8", errors="replace") for n in sorted(parts))
-        xml = re.sub(r"</w:p>|</a:p>|<w:br[^>]*/>", "\n", xml)
-        return htmlmod.unescape(re.sub(r"[ \t]+", " ", re.sub(r"<[^>]+>", "", xml)))
+            read = lambda n: z.read(n).decode("utf-8", errors="replace") if n in z.namelist() else ""
+            numbers: dict = {}
+            text = _ooxml_text(read("word/document.xml"), "w", numbers).strip("\n")
+            for kind, part, heading in (("footnote", "word/footnotes.xml", "Footnotes"), ("endnote", "word/endnotes.xml", "Endnotes")):
+                rows = _word_notes(read(part), kind, numbers.setdefault(kind, {}))
+                if rows:
+                    text += f"\n\n{heading}\n" + "\n".join(rows)
+        return text + "\n"
+    if suffix == ".pptx":
+        with zipfile.ZipFile(io.BytesIO(body)) as z:
+            slides = [z.read(n).decode("utf-8", errors="replace") for n in _slide_order(z)]
+        return "\n\n".join(f"[slide {i}]\n" + _ooxml_text(x, "a").strip("\n") for i, x in enumerate(slides, 1)) + "\n"
     t = body.decode("utf-8", errors="replace")
     if suffix in {".html", ".htm"}:
         t = re.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", t)
@@ -64,11 +183,17 @@ def cmd_doc(a):
     EXT.setdefault(DOC_TYPES[".docx"], "docx")
     EXT.setdefault(DOC_TYPES[".pptx"], "pptx")
     ref = Fetcher("web").store(f.read_bytes(), url=f"file:{f.name}", content_type=ctype, meta={"file": f.name})
-    sid = ledger.add_source({"title": a.title or f.stem, "url": f"file:{f.name}", "publisher": a.publisher or "",
-                             "accessed": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sha256": ref.sha256,
-                             "raw": ref.path, "file": f.name, "kind": "document", "note": a.note or "",
-                             **({"date": a.date} if a.date else {}), **({"author": a.author} if a.author else {})})
-    print(f"{sid}  {f.name}\n      archived raw/{ref.path}  (cite as [@{sid}]; read it with `sb source {sid}`)")
+    entry = {"title": a.title or f.stem, "url": f"file:{f.name}", "publisher": a.publisher or "",
+             "accessed": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sha256": ref.sha256,
+             "raw": ref.path, "file": f.name, "kind": "document", "note": a.note or "",
+             **({"date": a.date} if a.date else {}), **({"author": a.author} if a.author else {})}
+    sid, created = ledger.register_source(entry, new=a.new)
+    if not created:
+        from .cli import already_registered
+        print(already_registered(sid, ref.sha256))
+        return
+    print(f"{sid}  {ledger.source_label(entry)}\n      file {f.name}, archived raw/{ref.path}  "
+          f"(cite as [@{sid}]; read it with `sb source {sid}`)")
 
 
 def cmd_piece(a):
@@ -119,8 +244,11 @@ def cmd_piece(a):
             ids = a.args or [x["id"] for x in pieces.load()]
             bad = 0
             for pid in ids:
-                errs, warns = pieces.check(pid)
+                found = pieces.findings(pid)
+                errs, warns = found["errors"], found["warnings"]
                 bad += len(errs)
+                for i in found["info"]:
+                    print(f"info:    {pid}: {i}")
                 for w in warns:
                     print(f"warning: {pid}: {w}")
                 for e in errs:
@@ -215,9 +343,16 @@ def cmd_pack(a):
             if done.get("pack"):
                 p = done["pack"]
                 print(f"pack {p['name']}" + (f" {p['version']}" if p["version"] else "") + f": {p['files']} files checked")
+                print(f"from {p['source']} (sha256 {p['sha256'][:12]})")
             print(f"installed designs: {', '.join(done['designs']) or 'none'}; templates: {', '.join(done['templates']) or 'none'}")
-            if done.get("replaced"):
-                print("replaced (were installed before): " + ", ".join(done["replaced"]))
+            prev = done.get("previous")
+            if done.get("source_differs") and prev:
+                print(f"note: the content differs from what was installed on {str(prev.get('installed', ''))[:10]} "
+                      f"from {prev.get('source') or prev.get('file')}")
+            if done.get("changed"):
+                print("replaced, differs from what was installed: " + ", ".join(done["changed"]))
+            if done.get("unchanged"):
+                print("replaced, the same as installed: " + ", ".join(done["unchanged"]))
         else:
             print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or []))
     except (ValueError, OSError) as e:
@@ -303,7 +438,9 @@ def cmd_mcp(a):
 
 def add_parsers(sub) -> None:
     s = sub.add_parser("doc"); s.add_argument("file"); s.add_argument("--title"); s.add_argument("--publisher")
-    s.add_argument("--author"); s.add_argument("--date"); s.add_argument("--note"); s.set_defaults(f=cmd_doc)
+    s.add_argument("--author"); s.add_argument("--date"); s.add_argument("--note")
+    s.add_argument("--new", action="store_true", help="register again even if the same bytes are already a source")
+    s.set_defaults(f=cmd_doc)
     s = sub.add_parser("piece"); s.add_argument("what", choices=["list", "add", "show", "set", "rm", "check", "due"])
     s.add_argument("args", nargs="*"); s.add_argument("--id"); s.add_argument("--at", help='when to publish, e.g. "2026-11-20 08:30"')
     for opt in ("title", "kind", "template", "design", "status", "lang", "channel", "note", "prompt", "url"):

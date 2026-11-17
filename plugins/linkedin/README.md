@@ -18,9 +18,9 @@ explicitly. Without a browser only the HTML page is written, unchecked, and the 
 | Command | Does |
 | --- | --- |
 | `sb template new ID --kind slides [--design ID]` | writes the standard slides template into the registry, to adapt |
-| `sb render PIECE --template ID [--design ID]` | HTML, PNG per slide, carousel PDF, `layout.json`, `preview.json` in `pieces/<id>/render/<template>/` |
+| `sb render PIECE --template ID [--design ID]` | HTML, PNG per slide, carousel PDF (two slides or more), `layout.json`, `preview.json` in `pieces/<id>/render/<template>/` |
 | `sb linkedin check PIECE` | text length, first line, hashtags, slide count, deck structure, sources, stale renders |
-| `sb linkedin bundle PIECE [--template ID] [--out FOLDER]` | a folder to post by hand: `post.txt`, the PNGs, the PDF, `alt-texts.txt`, `README.txt` with the steps |
+| `sb linkedin bundle PIECE [--template ID] [--out FOLDER]` | a folder to post by hand: `post.txt`, the PNGs, the PDF, `alt-texts.txt`, `README.txt` with the steps (in the deck's language, de or en) |
 
 Posting is manual. Sourcebound holds no LinkedIn credentials, and publishing is the person's
 decision (`sb piece set ID --status published --url ...` records it afterwards). An API
@@ -53,12 +53,22 @@ Text anywhere may hold `{{result:key}}` (a recorded number) and source keys from
 "(Publisher year)". A numeric field (`value`, `max`, `pos`, ...) may be a single
 `{{result:key}}`: then the recorded value is used.
 
-Every block takes `name` and `unit` (the exhibit heading), `grow: true` (take the free height,
-centred) and `push: true` (move to the bottom).
+Spaces that must not break a line are set as non-breaking spaces when the text is filled in:
+after "§", "§§", "Art.", "Abs." and "Nr." ("§ 34h"), between a number and its unit ("1.800 €",
+"44 %", "5 Mrd. €") and after a currency code before a number ("EUR 20"). Type ordinary spaces.
+
+A deck of one slide is a single-image post: no page counter, no carousel PDF.
+
+Every block takes `name` and `unit` (the exhibit heading), `grow: true` and `push: true` (move
+to the bottom). A grown block takes the free height of the slide, and its chart is spread over
+it: bar and table rows, the gap between rows and the thickness of bars, the height of columns
+and lines, and the size of kpi numbers grow, each up to a limit (a row to 2.2 times its height,
+a bar to 1.6 times its thickness). What the limits leave over stays around the chart and counts
+as empty (see Checks).
 
 | `type` | Fields |
 | --- | --- |
-| `kpis` | `items: [{n, t}]`: a number and what it is |
+| `kpis` | `items: [{n, t}]`: a number and what it is; up to three side by side (four on a wide slide), four in two rows of two, more in rows of three |
 | `bars` | `groups: [{label, rows: [{label, value, text, hi}]}]` or `rows`; `max` (the scale's end), `label_width` |
 | `columns` | `items: [{label, value, text, hi}]`, `max`, `height`; at most 12 |
 | `line` | `x: [...]`, `series: [{label, values, hi, end_text}]` (null marks a gap), `min`, `max`, `refs: [{y, label}]`, `height`, `gutter`; at most 6 series |
@@ -87,7 +97,9 @@ from them, `--p-1` to `--p-6`, `--f-body`, `--f-heading`, `--w-light`, `--w-regu
 Fonts: `fonts.files` lists font files in the design folder; they are embedded. `fonts.faces`
 maps weights to files and to the names an installed font answers to
 (`{file, weight, local: [...]}`). `fonts.weights` sets the three weights the slides use. A
-typeface that is not on the machine falls back along the stack, and the render says so.
+typeface that is not on the machine falls back along the stack, and the render names it by the
+name it is installed under and its weight: `missing fonts: Inter 400, Inter-Bold 700, Source Serif 4`
+(every `@font-face` of the design and of the template counts).
 `logo.file` is shown bottom right; without `logo.file_inverse` the cover shows the logo in the
 paper colour.
 
@@ -105,13 +117,23 @@ After the page is laid out, and before any image is made:
 - text is smaller than `charts.min_font_px`, or wider than its box or column;
 - a colour is in use that the design does not have.
 
+Warnings, which do not stop the render (in the output and in `layout.json`):
+
+- "slide n: about x % of the content area is empty": the space below the last block, inside a
+  grown block and above a pushed one, from 25 % on (`empty_warn_pct` in `template.yaml` or
+  `charts` of the design changes it). `layout.json` lists the share for every slide (`space`);
+- fonts that are missing (see Fonts).
+
+`sb render` prints corrections and warnings once each, as `note:` lines.
+
 Corrections applied first, each listed in the output and in `layout.json`:
 
 - bars: the label column is widened to fit the longest label (up to 45 % of the chart);
   a value that does not fit beside its bar is set inside it;
 - timeline: a label that would collide is moved to the other side of the axis or turned;
 - windows: a date label that would leave the chart is set to the left of its bar;
-- line: end labels are moved apart; x-axis labels that would touch are thinned.
+- line: end labels are moved apart; x-axis labels that would touch are thinned;
+- a grown block: its chart is spread over the block's height (see above).
 
 Anything else stops the render with the slide, the block and what to change. The page that was
 measured is stored without its script and is the page that is photographed.

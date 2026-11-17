@@ -13,6 +13,7 @@ Evidence references (claims.yaml `ref`):
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import re
 import subprocess
@@ -221,19 +222,67 @@ def next_source_id(project: config.Project | None = None) -> str:
     return f"W-{n + 1:04d}"
 
 
-def add_source(entry: dict, project: config.Project | None = None) -> str:
-    """Register a web source and return its id.  Without an `id` the next free W-xxxx is
-    taken; id and entry are written under one lock, so parallel scouts get distinct ids."""
-    p = project or config.project()
+SOURCES_HEAD = "# Web sources outside Zotero. Add with `sb snap URL --title ...` (archives the page).\n"
+SOURCE_FIELDS = ("title", "publisher", "author", "date")      # what `sb source set` may change
+
+
+def source_label(s: dict) -> str:
+    """How a source is named in messages: its title, with the publisher in brackets."""
+    title = s.get("title") or s.get("file") or s.get("url") or "(no title)"
+    return f"{title} ({s['publisher']})" if s.get("publisher") else str(title)
+
+
+def _edit_sources(p: config.Project, change):
+    """Run `change(sources) -> (result, changed)` on evidence/sources.yaml under its lock; write
+    the file only when something changed, keeping its leading comment block."""
     f = p.root / "evidence" / "sources.yaml"
     f.parent.mkdir(parents=True, exist_ok=True)
     with config.locked(f):
-        doc = (yaml.safe_load(f.read_text(encoding="utf-8")) if f.exists() else None) or {}
-        entry = {"id": entry.get("id") or next_source_id(p), **{k: v for k, v in entry.items() if k != "id"}}
-        doc["sources"] = (doc.get("sources") or []) + [entry]
-        head = "# Web sources outside Zotero. Add with `sb snap URL --title ...` (archives the page).\n"
-        config.write_atomic(f, head + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100))
-    return entry["id"]
+        text = f.read_text(encoding="utf-8") if f.exists() else ""
+        doc = (yaml.safe_load(text) if text.strip() else None) or {}
+        doc["sources"] = list(doc.get("sources") or [])
+        result, changed = change(doc["sources"])
+        if changed:
+            head = "".join(x for x in itertools.takewhile(lambda x: x.startswith("#"), text.splitlines(True))) or SOURCES_HEAD
+            config.write_atomic(f, head + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100))
+    return result
+
+
+def register_source(entry: dict, project: config.Project | None = None, *, new: bool = False) -> tuple[str, bool]:
+    """(id, created) for a source.  The same bytes (sha256) already registered give the existing
+    id and no new entry, unless `new`.  Lookup and write happen under one lock."""
+    def change(sources):
+        if not new and entry.get("sha256"):
+            same = next((s for s in sources if s.get("sha256") == entry["sha256"]), None)
+            if same is not None:
+                return (str(same.get("id")), False), False
+        n = max([int(s["id"][2:]) for s in sources if re.fullmatch(r"W-\d{4}", str(s.get("id")))] or [0])
+        e = {"id": entry.get("id") or f"W-{n + 1:04d}", **{k: v for k, v in entry.items() if k != "id"}}
+        sources.append(e)
+        return (e["id"], True), True
+    return _edit_sources(project or config.project(), change)
+
+
+def add_source(entry: dict, project: config.Project | None = None) -> str:
+    """Register a web source and return its id.  Without an `id` the next free W-xxxx is
+    taken; id and entry are written under one lock, so parallel scouts get distinct ids."""
+    return register_source(entry, project, new=True)[0]
+
+
+def update_source(sid: str, fields: dict, project: config.Project | None = None) -> tuple[dict, dict]:
+    """Change descriptive fields (title, publisher, author, date) of one source; (before, after)."""
+    bad = sorted(set(fields) - set(SOURCE_FIELDS))
+    if bad:
+        raise ValueError(f"cannot change {', '.join(bad)} of a source (only {', '.join(SOURCE_FIELDS)})")
+
+    def change(sources):
+        s = next((x for x in sources if x.get("id") == sid), None)
+        if s is None:
+            raise KeyError(f"{sid}: not in evidence/sources.yaml")
+        before = dict(s)
+        s.update(fields)
+        return (before, dict(s)), before != s
+    return _edit_sources(project or config.project(), change)
 
 
 def status_table(project: config.Project | None = None) -> str:

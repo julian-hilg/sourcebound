@@ -140,7 +140,8 @@ def build_html(doc, template: dict, design: dict) -> tuple[str, dict, list[str]]
     css_tokens, allowed, missing = tokens(design)
     css_tokens += f"\n:root {{ --w: {d['width']}px; --h: {d['height']}px; }}"
     charts = design.get("charts") or {}
-    config = {"min_gap_px": charts.get("min_gap_px", 8), "min_font_px": charts.get("min_font_px", 16), "colors": allowed}
+    config = {"min_gap_px": charts.get("min_gap_px", 8), "min_font_px": charts.get("min_font_px", 16), "colors": allowed,
+              "empty_warn_pct": template.get("empty_warn_pct") or charts.get("empty_warn_pct") or 25}
     lang = "de" if str(d["lang"]).startswith("de") else "en"
     prefix = ((design.get("text") or {}).get("source_prefix") or {}).get(lang, "Source: ")
     logo, inverse = _logo(design, "file"), _logo(design, "file_inverse")
@@ -177,51 +178,77 @@ def render_slides(doc, template: dict, design: dict, out: Path) -> tuple[list[Pa
     page = out / f"{prefix}.html"
     page.write_text(html, encoding="utf-8")
     files = [page]
-    layout: dict = {"browser": None, "width": d["width"], "height": d["height"], "remedies": [], "problems": [], "fonts": {},
-                    "font_files_missing": missing_fonts}
+    layout: dict = {"browser": None, "width": d["width"], "height": d["height"], "remedies": [], "problems": [], "warnings": [],
+                    "fonts": {}, "faces": [], "font_files_missing": missing_fonts}
     exe = browser.find()
     slides = prepared["slides"]
     if exe is None:
         layout["note"] = "Only the HTML was written: the layout was not checked and no image was made. " + browser.HOW
-        print("warning:", layout["note"])
     else:
         dom = browser.dom(exe, page, width=d["width"], height=d["height"])
         report = _report(dom)
-        layout.update(browser=exe.name, remedies=report["remedies"], problems=report["problems"], fonts=report["fonts"])
+        layout.update(browser=exe.name, remedies=report["remedies"], problems=report["problems"], fonts=report["fonts"],
+                      warnings=report.get("warnings") or [], faces=report.get("faces") or [], space=report.get("space") or [])
         # The page that was measured becomes the page that is photographed: the corrections are
         # written into it and the script is taken out, so no image can differ from the measurement.
         page.write_text(_freeze(dom), encoding="utf-8")
+    missing = missing_typefaces(layout["faces"], layout["fonts"], design)
+    if missing:
+        used = next((name for name, ok in layout["fonts"].items() if ok and name != ALIAS), "the browser's default")
+        layout["font_note"] = (f"missing fonts: {', '.join(missing)}; {used} was used instead. Install them on this machine, "
+                               "or put the font files into the design folder (fonts.files in design.yaml).")
     (out / "layout.json").write_text(json.dumps(layout, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     files.append(out / "layout.json")
     if layout["problems"]:
         raise ValueError("the slides do not fit (nothing was photographed; the page is " + page.as_posix() + "):\n  "
                          + "\n  ".join(f"slide {p['slide']}, {p['block']}: {p['what']}" for p in layout["problems"]))
-    for r in layout["remedies"]:
-        print(f"layout: slide {r['slide']}, {r['block']}: {r['what']}")
-    fonts = layout["fonts"]
-    if fonts and not next(iter(fonts.values())):          # the first family of the stack is the design's own
-        first = next(iter(fonts))
-        used = next((name for name, ok in fonts.items() if ok), "the browser's default")
-        layout["font_note"] = (f"The design's typeface ({'its font files or installed fonts' if first == ALIAS else first}) is not on this machine; "
-                               f"{used} was used. Install the fonts or put the font files into the design folder.")
-        print("warning:", layout["font_note"])
-        (out / "layout.json").write_text(json.dumps(layout, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     images: list[Path] = []
+    doc_pdf = None
     if exe is not None:
         scale = float(d.get("scale") or template.get("scale") or 2)
         for n in range(1, len(slides) + 1):
             f = out / f"{prefix}_slide_{n}.png"
             browser.screenshot(exe, page, f"s{n}", f, width=d["width"], height=d["height"], scale=scale)
             images.append(f)
-        doc_pdf = out / f"{prefix}_carousel.pdf"
-        browser.pdf(exe, page, doc_pdf)
-        files += [*images, doc_pdf]
-    preview = post.preview(doc, slides, images, out / f"{prefix}_carousel.pdf" if images else None, d, layout)
+        files += images
+        if len(slides) > 1:              # one slide is posted as an image: there is nothing to swipe through
+            doc_pdf = out / f"{prefix}_carousel.pdf"
+            browser.pdf(exe, page, doc_pdf)
+            files.append(doc_pdf)
+    preview = post.preview(doc, slides, images, doc_pdf, d, layout)
     (out / "preview.json").write_text(json.dumps(preview, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    # What was adjusted, and what could not be done, goes into render.json with the files.
+    # What was adjusted, what looks thin and what could not be done goes into render.json with the
+    # files; `sb render` prints these notes (once).
     notes = [f"slide {r['slide']}, {r['block']}: {r['what']}" for r in layout["remedies"]]
+    notes += [f"slide {w['slide']}: {w['what']}" for w in layout["warnings"]]
     notes += [layout[k] for k in ("font_note", "note") if layout.get(k)]
     return files + [out / "preview.json"], notes
+
+
+def missing_typefaces(faces: list[dict], fonts: dict, design: dict) -> list[str]:
+    """The typefaces the page asked for and the machine did not have, as a person would install them.
+
+    A face is named by the name it asks the machine for (`local(...)`), with its weight when the
+    face has one weight: "Inter 400, Inter-Bold 700, Source Serif 4".  A family of the design that no
+    face describes counts when the browser drew it with the fallback.
+    """
+    names: dict[str, set] = {}
+    for f in faces:
+        if f.get("ok"):
+            continue
+        name = (f.get("local") or [None])[0] or ("the design's font file" if f.get("family") == ALIAS else f.get("family"))
+        if not name:
+            continue
+        w = str(f.get("weight") or "")
+        names.setdefault(name, set()).update({w} if re.fullmatch(r"\d+", w) else set())
+    described = {f.get("family") for f in faces} | {n for f in faces for n in f.get("local") or []}
+    generic = {"serif", "sans-serif", "monospace", "system-ui", "cursive"}
+    fams = design.get("fonts") or {}
+    for key in ("body", "heading", "serif"):
+        first = next((n for n in fams.get(key) or [] if n not in generic), None)
+        if first and fonts.get(first) is False and first not in described:
+            names.setdefault(first, set())
+    return [n + (" " + "/".join(sorted(ws, key=int)) if ws else "") for n, ws in names.items()]
 
 
 def check(doc, template: dict, design: dict) -> list[str]:

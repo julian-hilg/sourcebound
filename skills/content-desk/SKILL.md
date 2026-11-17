@@ -26,7 +26,14 @@ If the user asks for a format no installed plugin renders, say so; do not improv
 - A web page: `sb snap URL --title "..." --publisher "..."` (archives it, gives `W-xxxx`).
 - A report or any local file the user points to: `sb doc FILE --title "..." --publisher "..."`.
   For a folder of reports, register each file you will use; list the ones you skipped and why.
+  Registering the same file again gives back its id ("already registered as W-xxxx"); do not
+  use `--new` for that. A wrong title or publisher: `sb source set W-xxxx --publisher "..."`.
 - Read what you registered: `sb source W-xxxx --grep word`. Quote from the archived copy only.
+  `sb source` prints the first 4,000 characters and says so on its last line; read a long
+  report whole with `sb source W-xxxx --out FILE` (a scratch file, not in the project) or
+  search it with `--grep`. Footnotes (the report's own sources) come after the body, under
+  `Footnotes`. Images and charts are not read: a number seen only in a figure needs another
+  source that states it.
 - Findings go into `research/notes/<topic>.md`, one statement per line with its source id.
 - More than one sub-question: one `scout` per sub-question, in parallel; each writes one note.
 - A fetch that is refused stops that host. Report it; use another source.
@@ -34,9 +41,14 @@ If the user asks for a format no installed plugin renders, say so; do not improv
 ## 2. Numbers
 
 - Computed from data: a script in `analysis/` records it (`sourcebound.results.record`), you
-  commit, `sb run analysis`, and the text uses `{{result:key}}`.
+  commit, `sb run analysis`, and the text uses `{{result:key}}`. `sb run analysis` prints the
+  keys each script recorded, with their values: read them before you use them.
+- Computed from figures in a registered document: name it,
+  `results.record("key", value, sources=["W-0001"])`. `sb piece check` then shows which
+  source the result rests on. Cite that source next to the number in the text as well.
 - Quoted from a source: write the number and cite the source in the same sentence. Take it from
   the archived text, with the unit and the date it refers to. Never round beyond the source.
+  The same holds in `slides.yaml`: give each slide with a quoted number a `source:` line.
 
 ## 3. Write the piece
 
@@ -58,6 +70,10 @@ sb piece add "Working title" --kind post --template <id>     # kinds: post, note
 sb piece check <id>                       # fix every error; read every warning
 sb render <id> --template <id>            # writes pieces/<id>/render/<template>/
 ```
+
+- A number with no citation in its sentence (or, in `slides.yaml`, none on its slide) is a
+  warning: record it, or cite its source. A cited number is listed as `info`: confirm each one
+  against the archived source before you hand the piece over.
 
 - A slide render fails when text overflows, labels collide or the design is not followed. Fix
   the content (shorter labels, fewer rows, split the slide); do not touch the template.

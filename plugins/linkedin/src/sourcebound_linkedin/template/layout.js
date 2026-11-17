@@ -5,7 +5,8 @@
   "use strict";
   var cfg = JSON.parse(document.getElementById("sb-config").textContent);
   var GAP = cfg.min_gap_px, MIN_FONT = cfg.min_font_px;
-  var remedies = [], problems = [];
+  var EMPTY = cfg.empty_warn_pct || 25;      // warn when more of a slide's content area than this stays empty
+  var remedies = [], problems = [], warnings = [], space = [], faceState = {};
   // Every slide is laid out and measured in one pass. The renderer then stores the page as it
   // stands, without this script; opened by hand, the page shows all slides below each other.
   document.body.classList.add("all");
@@ -35,6 +36,83 @@
     var range = document.createRange(); range.selectNodeContents(el);
     var old = el.style.whiteSpace; el.style.whiteSpace = "nowrap";
     var w = range.getBoundingClientRect().width; el.style.whiteSpace = old; return w;
+  }
+
+  // ---- grown blocks -----------------------------------------------------------------------
+  // A block with `grow: true` takes the free height of the slide. Its chart is spread over that
+  // height (rows, bars, table rows and numbers get larger, each up to a limit) instead of sitting
+  // small in the middle of an empty area. What the limits leave over stays around the chart.
+  var ROW_MAX = 2.2, MARK_MAX = 1.6, PAD_MAX = 2.5, SIZE_MAX = 1.8, FONT_MAX = 1.35;
+  function px(el, prop) { return parseFloat(getComputedStyle(el)[prop]) || 0; }
+  function host(block) { return block.querySelector(":scope > .panel") || block; }   // the box that took the height
+  function free(box) {                       // height in `box` its content does not use
+    var inner = box.clientHeight - px(box, "paddingTop") - px(box, "paddingBottom"), used = 0;
+    Array.prototype.forEach.call(box.children, function (c) {
+      if (getComputedStyle(c).display === "none") return;
+      used += c.getBoundingClientRect().height + px(c, "marginTop") + px(c, "marginBottom");
+    });
+    return Math.max(0, inner - used);
+  }
+  function each(el, sel, fn) { Array.prototype.forEach.call(el.querySelectorAll(sel), fn); }
+  function taller(rows, f, rowMax, marks) {  // share `f` px among rows; marks inside grow with their row
+    if (!rows.length || f < 1) return;
+    var add = f / rows.length;
+    rows.forEach(function (r) {
+      var h = r.getBoundingClientRect().height, nh = Math.min(h + add, h * rowMax), k = nh / h;
+      r.style.minHeight = nh.toFixed(1) + "px";
+      if (r.style.height) r.style.height = nh.toFixed(1) + "px";
+      marks(r).forEach(function (m) {
+        var mh = px(m, "height");
+        if (mh > 0) m.style.height = Math.min(mh * k, mh * MARK_MAX).toFixed(1) + "px";
+      });
+    });
+  }
+  function grow(block) {
+    var box = host(block), f = free(box), c;
+    if (f < 8) return;
+    var start = f;
+    if ((c = box.querySelector(".bars"))) {
+      taller(Array.prototype.slice.call(c.querySelectorAll(".row")), f, ROW_MAX, function (r) { return [r.querySelector(".track"), r.querySelector(".bar")]; });
+    } else if ((c = box.querySelector(".gantt"))) {
+      taller(Array.prototype.slice.call(c.querySelectorAll(".r")), f, ROW_MAX, function (r) { return Array.prototype.slice.call(r.querySelectorAll(".seg:not(.ext)")); });
+    } else if ((c = box.querySelector(".win"))) {
+      var wr = Array.prototype.slice.call(c.querySelectorAll(".wr"));
+      wr.forEach(function (r) { r.style.height = r.getBoundingClientRect().height + "px"; });
+      taller(wr, f, ROW_MAX, function (r) { return Array.prototype.slice.call(r.querySelectorAll(".w")); });
+    } else if ((c = box.querySelector(".colchart"))) {
+      var h = c.getBoundingClientRect().height;
+      c.style.height = Math.min(h + f, h * SIZE_MAX).toFixed(1) + "px";
+    } else if ((c = box.querySelector(".linechart"))) {
+      var lh = c.getBoundingClientRect().height, nh = Math.min(lh + f, lh * SIZE_MAX);
+      c.style.height = nh.toFixed(1) + "px";
+      each(c, ".end", function (e) { e.style.top = ((nh - 44) * parseFloat(e.dataset.y) / 100).toFixed(1) + "px"; });
+    } else if ((c = box.querySelector("table"))) {
+      var trs = Array.prototype.slice.call(c.querySelectorAll("tbody tr"));
+      if (trs.length) {
+        var side = f / trs.length / 2;
+        trs.forEach(function (tr) {
+          Array.prototype.forEach.call(tr.children, function (td) {
+            var t = px(td, "paddingTop"), b = px(td, "paddingBottom");
+            td.style.paddingTop = Math.min(t + side, t * PAD_MAX).toFixed(1) + "px";
+            td.style.paddingBottom = Math.min(b + side, b * PAD_MAX).toFixed(1) + "px";
+          });
+        });
+      }
+    } else if ((c = box.querySelector(".kpis"))) {
+      each(c, ".kpi .n", function (n) {                 // larger numbers, as long as each still fits its box
+        var size = px(n, "fontSize"), best = size;
+        for (var k = FONT_MAX; k > 1.001 && best === size; k -= 0.05) {
+          n.style.fontSize = (size * k).toFixed(1) + "px";
+          if (n.scrollWidth <= n.clientWidth + 1) best = size * k;
+        }
+        n.style.fontSize = best.toFixed(1) + "px";
+      });
+      var kpis = Array.prototype.slice.call(c.children), top = {}, rows = 0;
+      kpis.forEach(function (k) { var t = Math.round(k.getBoundingClientRect().top); if (!(t in top)) { top[t] = 1; rows++; } });
+      var left = free(box);
+      if (rows > 1 && left > 0) c.style.rowGap = (px(c, "rowGap") + Math.min(left / (rows - 1), 120)).toFixed(1) + "px";
+    }
+    if (free(box) < start - 0.5) remedy(block, "the chart was spread over the height of its grown block");
   }
 
   // ---- remedies ---------------------------------------------------------------------------
@@ -132,6 +210,7 @@
   var slides = Array.prototype.slice.call(document.querySelectorAll(".slide")).filter(function (s) { return getComputedStyle(s).display !== "none"; });
 
   function run() {
+    slides.forEach(function (s) { Array.prototype.forEach.call(s.querySelectorAll(".block.grow"), grow); });
     slides.forEach(function (s) {
       Array.prototype.forEach.call(s.querySelectorAll(".bars"), bars);
       Array.prototype.forEach.call(s.querySelectorAll(".day"), day);
@@ -149,8 +228,38 @@
         fonts[fam] = width("40px \"" + fam + "\", monospace") !== width("40px monospace") || width("40px \"" + fam + "\", serif") !== width("40px serif");
       });
     });
-    document.getElementById("sb-report").textContent = JSON.stringify({ slides: slides.length, remedies: remedies, problems: problems, fonts: fonts });
+    // Every @font-face of the page (the design's and the template's), with the names it asks the
+    // machine for and whether it loaded: the renderer names the missing ones.
+    var faces = [];
+    Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+      var rules; try { rules = sheet.cssRules; } catch (e) { return; }
+      Array.prototype.forEach.call(rules, function (r) {
+        if (!(r instanceof CSSFontFaceRule)) return;
+        var st = r.style, src = st.getPropertyValue("src") || "", local = [];
+        src.replace(/local\(\s*["']?([^"')]+?)["']?\s*\)/g, function (_, name) { local.push(name); return _; });
+        var face = { family: unquote(st.getPropertyValue("font-family")), weight: weightOf(st.getPropertyValue("font-weight")),
+                     local: local, file: /url\(/.test(src) };
+        face.ok = faceState[face.family + "|" + face.weight] === true;
+        faces.push(face);
+      });
+    });
+    document.getElementById("sb-report").textContent = JSON.stringify({ slides: slides.length, remedies: remedies, problems: problems, warnings: warnings, space: space, fonts: fonts, faces: faces });
     document.documentElement.setAttribute("data-sb-done", "1");
+  }
+  function unquote(s) { return String(s || "").replace(/["']/g, "").trim(); }
+  function weightOf(w) {
+    return String(w || "400").trim().replace(/\bnormal\b/g, "400").replace(/\bbold\b/g, "700").replace(/\s+/g, " ");
+  }
+  // Load every face once, so that a face the page names but the machine lacks is known as such.
+  function loadFaces() {
+    if (!document.fonts || !document.fonts.forEach) return Promise.resolve();
+    var list = [];
+    document.fonts.forEach(function (f) { list.push(f); });
+    return Promise.all(list.map(function (f) {
+      return f.load().then(function () { return true; }, function () { return false; });
+    })).then(function (oks) {
+      list.forEach(function (f, i) { var k = unquote(f.family) + "|" + weightOf(f.weight); faceState[k] = faceState[k] === true || oks[i]; });
+    });
   }
 
   // ---- measuring --------------------------------------------------------------------------
@@ -177,6 +286,21 @@
       var last = body.lastElementChild;
       if (last && rect(last).b > rect(foot).t - 16 + 0.5) problem(last, "the content is " + Math.ceil(rect(last).b - rect(foot).t + 16) + " px too tall for the slide: remove a block, shorten texts, or split the slide");
       if (rect(foot).b > box.b - 24) problem(foot, "the footer is pushed off the slide");
+      // how much of the content area stays empty: below the last block, inside grown blocks
+      // (what their limits left over), and where a pushed block left a gap
+      var top = rect(body).t + px(body, "paddingTop"), bottom = rect(body).b - px(body, "paddingBottom");
+      var blocks = Array.prototype.filter.call(body.children, function (b) { return getComputedStyle(b).display !== "none"; });
+      if (blocks.length && bottom - top > 0) {
+        var empty = Math.max(0, bottom - rect(blocks[blocks.length - 1]).b);
+        blocks.forEach(function (b, i) {
+          if (b.classList.contains("grow")) empty += free(host(b));
+          if (i && b.classList.contains("push")) empty += Math.max(0, rect(b).t - rect(blocks[i - 1]).b - 64);
+        });
+        var pct = Math.round(empty / (bottom - top) * 100 / 5) * 5;
+        space.push({ slide: Number(s.dataset.slide), empty_pct: pct });
+        if (pct >= EMPTY) warnings.push({ slide: Number(s.dataset.slide), block: "slide",
+          what: "about " + pct + " % of the content area is empty: let an exhibit take the height (`grow: true`), add a block, or merge slides" });
+      }
     }
     Array.prototype.forEach.call(s.querySelectorAll("*"), function (el) {
       var cs = getComputedStyle(el);
@@ -190,7 +314,7 @@
       if (ownText) {
         if (parseFloat(cs.fontSize) < MIN_FONT - 0.01) once(el, "text of " + parseFloat(cs.fontSize) + " px is below the design's minimum of " + MIN_FONT + " px (“" + words(el) + "”)");
         if (el.scrollWidth > el.clientWidth + 1 && cs.overflow !== "visible") once(el, "“" + words(el) + "” overflows its box");
-        if (el.hasAttribute("data-fit") && el.scrollWidth > el.clientWidth + 1) once(el, "“" + words(el) + "” is wider than its box: shorten it");
+        if (el.hasAttribute("data-fit") && el.scrollWidth > el.clientWidth + 1) once(el, "“" + words(el) + "” is wider than its box: shorten it, or use fewer items per kpis block");
         // a single long word wider than its column
         var parent = el.closest(".cm, .kpi, .collabels div, td, .l, .wl");
         if (parent && rect(el).w > rect(parent).w + 1) once(el, "“" + words(el) + "” is wider than its column");
@@ -227,5 +351,6 @@
     });
   }
 
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(run); else run();
+  function start() { loadFaces().then(run, run); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else run();
 })();
