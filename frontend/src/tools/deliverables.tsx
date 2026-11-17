@@ -31,6 +31,8 @@ const noteSchema = z.object({
   prompt: z.string().max(20_000),
 });
 
+/** How a render's kind is named in the table. */
+const FORMATS: Record<string, string> = { docx: "Word", slides: "slides", markdown: "Markdown", text: "text" };
 const EMPTY: Draft = { title: "", kind: "note", status: "idea", deliverable: "", text: "", prompt: "" };
 const draftOf = (n: Note): Draft => ({ title: n.title, kind: n.kind, status: n.status, deliverable: n.deliverable ?? "", text: n.text ?? "", prompt: n.prompt ?? "" });
 
@@ -66,7 +68,7 @@ function Deliverables() {
       <div className="wb-toolhead">
         <strong>Deliverables</strong>
         <span>
-          {d.deliverable_folders.length} written, {d.notes.filter((n) => n.status !== "done" && n.status !== "dropped").length} wanted
+          {d.deliverable_folders.length} written, {d.deliverable_folders.reduce((n, f) => n + (f.renders?.length ?? 0), 0)} rendered, {d.notes.filter((n) => n.status !== "done" && n.status !== "dropped").length} wanted
         </span>
         <span className="sb-grow" />
         <button className="wb-button" onClick={() => open(null)}>
@@ -107,6 +109,29 @@ function Deliverables() {
                   <td>–</td>
                 </tr>
               ))}
+              {d.deliverable_folders.flatMap((f) =>
+                (f.renders ?? []).map((r) => (
+                  <tr key={`render-${f.name}-${r.template}`}>
+                    <td className="sb-wrap">
+                      <span className="wb-dim">deliverables/{f.name} as</span> <strong>{r.template}</strong>{" "}
+                      <span className="wb-dim">
+                        design {r.design || "–"}
+                        {r.stale.length > 0 && `, ${r.stale.length} number${r.stale.length === 1 ? "" : "s"} changed since: render again`}
+                      </span>
+                    </td>
+                    <td>{FORMATS[r.kind] ?? r.kind}</td>
+                    <td>
+                      {r.files.map((file) => (
+                        <a key={file} className="sb-ref" href={paths.raw(id, file)} download={file.split("/").pop()} title={file}>
+                          {file.split("/").pop()}
+                        </a>
+                      ))}
+                      {r.files.length === 0 && <span className="wb-dim">file is gone</span>}
+                    </td>
+                    <td>{when(r.at, false)}</td>
+                  </tr>
+                )),
+              )}
               {d.notes.map((n) => (
                 <tr
                   key={n.id}
@@ -215,6 +240,7 @@ export const deliverablesTool = defineTool<State>({
       handover: d.handover,
       notes: d.notes,
       form: state.editing ? { editing: state.editing, draft: state.draft } : null,
+      rendered: "Each entry of `written` lists under `renders` what `sb render deliverables/<name> --template ID` wrote (Word and other formats), with the files' paths in the project.",
       note: "Change notes with note.create, note.update and note.delete; they are stored in deliverables/notes.yaml of the project.",
     };
   },

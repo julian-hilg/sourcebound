@@ -1102,6 +1102,12 @@ def test_web_view_reads_the_project_files(hub, monkeypatch):
     assert d["hypotheses"]["total"] == len(d["hypothesis_list"]) > 0 and d["claims"]["total"] == len(d["claim_list"])
     assert d["handover"] == {"built": False} and ui.handover("study") == {"built": False}
     assert d["deliverable_folders"][0]["name"] == "paper" and {"path": "research/brief.md", "group": "Research"}.items() <= d["documents"][0].items()
+    assert d["deliverable_folders"][0]["renders"] == []
+    from sourcebound import config as cfg, render
+    render.render("deliverables/paper", "markdown", project=cfg.project(hub / "study"))       # another format of the paper
+    shown = ui.detail("study")["deliverable_folders"][0]["renders"]
+    assert [(r["template"], r["kind"], r["stale"]) for r in shown] == [("markdown", "markdown", [])]
+    assert shown[0]["files"] and all(x.startswith("dist/render/paper/markdown/") for x in shown[0]["files"])
     assert "brief" in ui.text_file("study", "research/brief.md")["text"].lower()
     for path in ("../other/project.yaml", "deliverables/paper/main.tex", "research/missing.md", ".git/config"):
         with pytest.raises(ui.NotFound):

@@ -215,7 +215,8 @@ def detail(pid: str) -> dict:
         if spec.get("pdf") and (p.root / spec["pdf"]).exists():
             pdfs = [spec["pdf"], *[x for x in pdfs if x != spec["pdf"]]]
         folders.append({"name": d.name, "kind": spec.get("kind") or "", "format": "markdown" if deliverable.is_markdown(d) else "latex",
-                        "sections": len([*d.glob("sections/*.tex"), *d.glob("sections/*.md")]), "pdf": pdfs[0] if pdfs else None})
+                        "sections": len([*d.glob("sections/*.tex"), *d.glob("sections/*.md")]), "pdf": pdfs[0] if pdfs else None,
+                        "renders": _renders(p, d.name)})
     log = _log(p.root)
     return {**summary(pid, p.root), "card": json.loads(json.dumps(p.meta, default=str)),
             "frozen": json.loads(json.dumps(frozen, default=str)) or None,
@@ -239,6 +240,22 @@ def _inside(p: config.Project, rel: str, roots: tuple, suffixes: set) -> Path:
     if not f.is_file():
         raise NotFound(f"{rel} does not exist")
     return f
+
+
+def _renders(p: config.Project, name: str) -> list[dict]:
+    """What `sb render deliverables/<name>` wrote (Word, slides, ...): one entry per template, newest first."""
+    try:
+        current = results.load(p)
+    except Exception:
+        current = {}
+    out = []
+    for m in render.renders(p.root / "dist" / "render" / name):
+        rel = Path(m["folder"]).relative_to(p.root).as_posix()
+        notes_ = m.get("notes") or []
+        out.append({"template": m.get("template", ""), "kind": m.get("kind", ""), "design": m.get("design", ""), "at": m.get("at", ""),
+                    "files": [f"{rel}/{x}" for x in m.get("files") or [] if (p.root / rel / x).is_file()],
+                    "stale": render.stale(m, current), "notes": notes_ if isinstance(notes_, list) else []})
+    return sorted(out, key=lambda r: r["at"], reverse=True)
 
 
 def text_file(pid: str, rel: str) -> dict:

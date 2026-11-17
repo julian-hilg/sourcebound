@@ -315,6 +315,8 @@ export interface DeliverableFolder {
   format: "latex" | "markdown";
   sections: number;
   pdf: string | null;
+  /** What `sb render deliverables/<name>` wrote in other formats (Word, slides), newest first. */
+  renders?: PieceRender[];
 }
 
 export interface Detail extends Summary {
