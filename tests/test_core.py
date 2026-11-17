@@ -882,6 +882,33 @@ name: analyst  % not a comment
     assert "```\nname: analyst  % not a comment\n  -- kept as written\n```" in md
 
 
+def test_desktop_icon_starts_the_web_view(tmp_path):
+    from sourcebound import shortcut
+    assert shortcut.available()                                    # this checkout has the frontend
+    path = shortcut.create(tmp_path / "Desktop")
+    assert path.exists() and path.parent == tmp_path / "Desktop"
+    if os.name == "nt":
+        assert path.suffix == ".lnk"
+    else:
+        text = path.read_text(encoding="utf-8")
+        assert str(shortcut.sb_executable()) in text and " ui" in text and os.access(path, os.X_OK)
+    assert shortcut.create(tmp_path / "Desktop") == path          # a second run replaces it
+
+
+def test_find_up_skips_a_folder_it_may_not_read(tmp_path, monkeypatch):
+    from sourcebound import config
+    (tmp_path / "hub.toml").write_text("", encoding="utf-8")
+    start = tmp_path / "a" / "b"
+    start.mkdir(parents=True)
+    exists = Path.exists
+    def guarded(p, *args, **kw):            # like the root of a network share: access denied
+        if p.parent == tmp_path / "a":
+            raise PermissionError(13, "Access is denied", str(p))
+        return exists(p, *args, **kw)
+    monkeypatch.setattr(Path, "exists", guarded)
+    assert config.find_up("hub.toml", start) == tmp_path.resolve()
+
+
 def test_web_view_finds_node_on_the_path_or_in_wsl(tmp_path, monkeypatch):
     from sourcebound import ui
     found = {"npm": "/usr/bin/npm"}
@@ -1302,8 +1329,10 @@ def test_init_asks_a_person_and_refuses_to_guess_for_an_agent(tmp_path, monkeypa
     with pytest.raises(SystemExit, match="name the two folders"):          # no terminal, no folders: not a default to guess
         main(["init"])
     assert not config.user_config_path().exists()
-    answers = iter([str(tmp_path / "lake"), "", "acme"])                   # Enter takes the suggestion
+    answers = iter([str(tmp_path / "lake"), "", "acme", ""])               # Enter takes the suggestion (no desktop icon)
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    from sourcebound import shortcut
+    monkeypatch.setattr(shortcut, "create", lambda folder=None: pytest.fail("no icon was asked for"))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
     for var in ("HOME", "USERPROFILE"):                                    # the home folder, on every system

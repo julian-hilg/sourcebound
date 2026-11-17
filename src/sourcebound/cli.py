@@ -2,6 +2,7 @@
 
   sb init [--data-root PATH] [--projects-dir PATH]   where data and projects live (once per machine); asks in a terminal
   sb install [path|skill|agents]             `sb` on PATH, lead playbook and subagents for Claude Code
+  sb install shortcut                        a desktop icon that starts the web view (`sb init` offers it)
   sb doctor                                  resolved configuration and access checks
   sb run [analysis|figures|bib|lineage|paper|check ...]   project build steps in order (default: all)
   sb run analysis/h1_x.py                    one analysis script (its results are merged)
@@ -293,6 +294,9 @@ def cmd_init(a):
                                         "each its own git repository.", "~/Documents/research")
             if not a.github_owner:
                 owner = input("\nGitHub user or organisation for publishing a study (optional, Enter to skip)\n  []: ").strip()
+            from . import shortcut
+            if not a.shortcut and shortcut.available():
+                a.shortcut = input("\nA desktop icon that starts the web view (sb ui)? (y/N)\n  [n]: ").strip().lower() in ("y", "yes", "j", "ja")
             print()
         elif not data:
             sys.exit('sb init: name the two folders, they are the user\'s choice:\n'
@@ -313,8 +317,18 @@ def cmd_init(a):
     h = config._load_hub(path, "user", None, (None, None, None))
     for m in seed_registry(h):
         print("created", m)
-    print(f"data root:       {h.lake_root}\nresearch folder: {h.projects_dir or '-- (none set; sb new creates projects in the current folder)'}"
-          "\nnext: sb doctor")
+    print(f"data root:       {h.lake_root}\nresearch folder: {h.projects_dir or '-- (none set; sb new creates projects in the current folder)'}")
+    if a.shortcut:
+        _shortcut()
+    print("next: sb doctor")
+
+
+def _shortcut() -> None:
+    from . import shortcut
+    if not shortcut.available():
+        print("desktop icon: skipped (this installation has no web view)")
+        return
+    print(f"desktop icon -> {shortcut.create()} (starts `sb ui`; build the web view once with `sb ui --build`)")
 
 
 def _place(src: Path, dst: Path) -> str:
@@ -369,12 +383,15 @@ def cmd_install(a):
         for f in sorted((src / ".claude" / "agents").glob("*.md")):
             how.add(_place(f, claude / "agents" / f"sb-{f.name}"))
         print(f"subagents -> {claude / 'agents'} (sb-*.md)")
+    if "shortcut" in what:
+        _shortcut()
     if "copied" in how:
         print("note: copied, not linked (no permission for symlinks): run `sb install` again after updating the checkout")
     if a.what == "all":
         if not config.user_config_path().exists() and sys.stdin.isatty() and sys.stdout.isatty():
             print("\nLast step: where data and projects live.\n")
-            cmd_init(argparse.Namespace(data_root=None, projects_dir=None, github_owner=None, defaults=False, force=False))
+            cmd_init(argparse.Namespace(data_root=None, projects_dir=None, github_owner=None, defaults=False, force=False,
+                                        shortcut=False))
         elif not config.user_config_path().exists():
             print("next: sb init --data-root PATH --projects-dir PATH (the user chooses both folders), then sb doctor")
         else:
@@ -950,10 +967,11 @@ def main(argv=None):
     s.add_argument("--github-owner", help="GitHub user or organisation for `sb publish --push`")
     s.add_argument("--defaults", action="store_true", help="take ~/research-lake and ~/Documents/research without asking")
     s.add_argument("--force", action="store_true", help="overwrite an existing user configuration")
+    s.add_argument("--shortcut", action="store_true", help="also put a desktop icon that starts the web view (asked in a terminal)")
     s.set_defaults(f=cmd_init)
     s = sub.add_parser("doctor"); s.add_argument("--json", action="store_true", help="the system report as data")
     s.set_defaults(f=cmd_doctor)
-    s = sub.add_parser("install"); s.add_argument("what", nargs="?", default="all", choices=["all", "path", "skill", "agents", "hooks"])
+    s = sub.add_parser("install"); s.add_argument("what", nargs="?", default="all", choices=["all", "path", "skill", "agents", "hooks", "shortcut"])
     s.add_argument("--bin", help="folder on PATH for the `sb` launcher (default ~/.local/bin)"); s.set_defaults(f=cmd_install)
     s = sub.add_parser("run"); s.add_argument("steps", nargs="*"); s.set_defaults(f=cmd_run)
     s = sub.add_parser("which"); s.add_argument("what", choices=sorted(WHICH)); s.set_defaults(f=cmd_which)

@@ -35,6 +35,9 @@ same data. `sb doctor` prints what was resolved. To set them without being asked
 coding agent): `sb init --data-root PATH --projects-dir PATH`. To change them later:
 `sb init --force`.
 
+The same questions offer a desktop icon that starts the web view (`sb ui`). It is not made
+unless you say yes; without asking: `sb init ... --shortcut`, or later `sb install shortcut`.
+
 ## Install the core
 
 macOS and Linux:
@@ -104,10 +107,11 @@ needs.
 
 > Please install Sourcebound on this machine, one step at a time, and stop if a step fails.
 >
-> 1. **Ask me two questions first, and wait for my answers:** (a) which folder should be the
+> 1. **Ask me three questions first, and wait for my answers:** (a) which folder should be the
 >    *data root* (the data lake, the raw archive and the registry live there; it grows large and
->    is never in git), and (b) which folder should be the *research folder* (my projects go
->    there, one folder each). Suggest `~/research-lake` and `~/Documents/research` (on Windows
+>    is never in git), (b) which folder should be the *research folder* (my projects go
+>    there, one folder each), and (c) whether I want a desktop icon that starts the web view
+>    (default no). Suggest `~/research-lake` and `~/Documents/research` (on Windows
 >    `D:\research-lake` and `Documents\research`) and tell me what each is for. Do not create
 >    or choose them yourself.
 > 2. Check the requirements: `uv --version` and `git --version`. If uv is missing, install it
@@ -118,7 +122,8 @@ needs.
 >    `uv run sb install`. Run from you, it cannot ask me anything and will say that `sb init`
 >    is still to do. If `sb` is not on the PATH afterwards, tell me which folder to add.
 > 5. Run `sb init --data-root <my data root> --projects-dir <my research folder>` with the two
->    folders from step 1. It refuses to run without them; never use `--defaults` unless I said so.
+>    folders from step 1, and `--shortcut` only if I said yes to the icon. It refuses to run
+>    without the folders; never use `--defaults` unless I said so.
 > 6. Run `sb doctor` and show me the lines "data root" and "registry". It must report 0
 >    errors. Explain every warning in one sentence.
 > 7. Run the tests (`make test`, or `uv run pytest -q` on Windows) and tell me the result.
