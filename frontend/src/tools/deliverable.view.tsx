@@ -81,19 +81,34 @@ function Text({ markdown, reading, inline = false }: { markdown: string; reading
   );
 }
 
-/** A figure as an image. A PDF figure needs a converter on the machine (pdftoppm or sips); without one it is offered as a file. */
-function FigureImage({ project, file, number }: { project: string; file: string; number: number }) {
+/**
+ * A figure. Needs no LaTeX: a PDF figure is shown as an image where the service can convert it
+ * (pdftoppm or sips), otherwise as the PDF itself, which browsers display. A figure that is not in
+ * the handover says why: a TikZ diagram is built once where LaTeX is installed, then kept.
+ */
+function FigureImage({ project, file, number, handover }: { project: string; file: string; number: number; handover: Handover }) {
   const [failed, setFailed] = useState(false);
   const path = `dist/handover/figures/${file}`;
-  if (failed)
+  const open = (
+    <a href={paths.raw(project, path)} target="_blank" rel="noreferrer">
+      Open {file}
+    </a>
+  );
+  if (handover.figures && !handover.figures.includes(file))
     return (
       <p className="sb-missing">
-        This figure cannot be shown as an image here (a PDF figure needs pdftoppm on the machine that runs sb ui).{" "}
-        <a href={paths.raw(project, path)} target="_blank" rel="noreferrer">
-          Open {file}
-        </a>
+        {file} is not in the handover. A TikZ diagram is built once where LaTeX is installed (<code>sb handover</code>); commit{" "}
+        <code>figures/tikz/{file}</code> and every machine shows it, with or without LaTeX.
       </p>
     );
+  if (/\.pdf$/i.test(file) && (handover.pdf_as_png === false || failed))
+    return (
+      <object className="sb-figure-pdf" data={`${paths.raw(project, path)}#toolbar=0&navpanes=0&view=FitH`} type="application/pdf" aria-label={`Figure ${number}`}>
+        <p className="sb-missing">This browser does not show PDF figures. {open}</p>
+      </object>
+    );
+  if (failed)
+    return <p className="sb-missing">This figure cannot be shown here. {open}</p>;
   return <img src={paths.raw(project, path, true)} alt={`Figure ${number}`} loading="lazy" onError={() => setFailed(true)} />;
 }
 
@@ -111,7 +126,7 @@ function BlockView({ block: b, reading, project }: { block: Block; reading: Read
   if (b.type === "figure")
     return (
       <figure data-anchor={b.anchor}>
-        <FigureImage project={project} file={b.file} number={b.number} />
+        <FigureImage project={project} file={b.file} number={b.number} handover={reading.handover} />
         <figcaption>
           <strong>Figure {b.number}.</strong> <Text markdown={b.caption} reading={reading} inline />
         </figcaption>

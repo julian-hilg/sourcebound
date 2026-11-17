@@ -254,6 +254,11 @@ def raw_file(pid: str, rel: str, as_png: bool) -> tuple[bytes, str]:
     return f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream"
 
 
+def pdf_as_png() -> bool:
+    """A PDF figure can be shown as an image (else the page shows the PDF itself)."""
+    return bool(shutil.which("pdftoppm") or shutil.which("sips"))
+
+
 def _png(pdf: Path) -> Path | None:
     cache = Path(tempfile.gettempdir()) / "sourcebound-ui"
     cache.mkdir(exist_ok=True)
@@ -297,7 +302,8 @@ def handover(pid: str) -> dict:
         edited = None
     return {"built": True, **_handover_state(p), "handover": doc, "sections": sections, "results": res,
             "tables": tables, "references": bib, "web_sources": web, "edited_by_person": edited,
-            "figures": sorted(f.name for f in (out / "figures").glob("*")) if (out / "figures").is_dir() else []}
+            "figures": sorted(f.name for f in (out / "figures").glob("*")) if (out / "figures").is_dir() else [],
+            "pdf_as_png": pdf_as_png()}
 
 
 # ------------------------------------------------------------------ actions (what the command line does)

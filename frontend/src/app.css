@@ -475,6 +475,14 @@ tr[aria-selected="true"] .wb-warn {
   color: var(--wb-bad);
   text-align: left;
 }
+/* A PDF figure shown as the PDF itself (no converter on the machine). */
+.sb-figure-pdf {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 70vh;
+  border: 1px solid var(--wb-border);
+}
 /* A recorded number: a button that looks like text. */
 .sb-number {
   display: inline;

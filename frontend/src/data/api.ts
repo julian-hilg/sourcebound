@@ -390,6 +390,8 @@ export interface Handover extends HandoverState {
   web_sources?: Record<string, WebSource>;
   edited_by_person?: string[] | null;
   figures?: string[];
+  /** The service can turn a PDF figure into an image (pdftoppm or sips); else the page shows the PDF itself. */
+  pdf_as_png?: boolean;
 }
 
 export interface FetchEntry {
