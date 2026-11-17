@@ -621,8 +621,6 @@ def cmd_snap(a):
 def cmd_source(a):
     """Text of an archived web source (for verification): sb source W-0003 [--grep word]."""
     import html as htmlmod
-    import subprocess
-    import tempfile
 
     from . import ledger
     from .fetch import read_raw
@@ -645,12 +643,8 @@ def cmd_source(a):
         sys.exit(f"{a.id}: no archived snapshot")
     body = read_raw("web", src["sha256"])
     if src.get("raw", "").endswith(".pdf.zst"):
-        if shutil.which("pdftotext") is None:
-            sys.exit(f"{a.id}: a PDF; reading it needs pdftotext (poppler)")
-        with tempfile.TemporaryDirectory() as tmp:           # a named file: Windows cannot reopen an open one
-            (Path(tmp) / "source.pdf").write_bytes(body)
-            text = subprocess.run(["pdftotext", "-layout", str(Path(tmp) / "source.pdf"), "-"], capture_output=True,
-                                  text=True, encoding="utf-8", errors="replace").stdout
+        from . import pdftext
+        text, _engine = pdftext.text(body, page=a.page)
     elif src.get("file"):                               # a document brought in with `sb doc`
         from .cli_more import document_text
         text = document_text(body, src["file"])

@@ -230,7 +230,6 @@ def text(citekey: str, *, page: int | None = None) -> tuple[str, dict]:
                 raise RuntimeError(f"{citekey}: the converted text has no page markers; read it whole")
             body = pages.get(page, "")
         return body, info
-    if shutil.which("pdftotext") is None:
-        raise RuntimeError(f"{citekey}: not converted yet and pdftotext is not installed (sb papers status)")
-    args = ["pdftotext", "-layout", *(["-f", str(page), "-l", str(page)] if page else []), str(d / "paper.pdf"), "-"]
-    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout, info
+    from . import pdftext
+    body, info["kind"] = pdftext.text(d / "paper.pdf", page=page)
+    return body, info
