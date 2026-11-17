@@ -212,7 +212,12 @@ def cmd_pack(a):
     try:
         if a.what == "install":
             done = assets.install_pack(a.folder)
+            if done.get("pack"):
+                p = done["pack"]
+                print(f"pack {p['name']}" + (f" {p['version']}" if p["version"] else "") + f": {p['files']} files checked")
             print(f"installed designs: {', '.join(done['designs']) or 'none'}; templates: {', '.join(done['templates']) or 'none'}")
+            if done.get("replaced"):
+                print("replaced (were installed before): " + ", ".join(done["replaced"]))
         else:
             print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or []))
     except (ValueError, OSError) as e:

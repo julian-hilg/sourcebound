@@ -82,9 +82,24 @@ shows the schedule and a preview; a plugin may prepare a bundle to post by hand.
 sb plugin list
 sb design list | show ID | new ID --name "Organisation"
 sb template list | new ID --kind KIND --design ID | add FOLDER
-sb pack install FOLDER | export FOLDER --design ID --template ID
+sb pack install FOLDER|FILE.zip | export FOLDER|FILE.zip --design ID --template ID
 sb render TARGET --template ID          # TARGET: a piece id, or deliverables/<name>
 ```
+
+A pack travels as a folder or as one `.zip`. A zip is checked completely before anything is
+copied, and refused as a whole with every problem named:
+
+| Rule | |
+| --- | --- |
+| Content | `designs/<id>/`, `templates/<id>/`; at the top `pack.yaml`, `README*`, `LICENSE*`; one folder around everything is fine |
+| Paths | no absolute paths, no `..`, no links; ids in lowercase letters, digits, `-`, `_` |
+| File types | data only: YAML/JSON/text, Office files and templates, images, fonts, CSS/HTML/Jinja, LaTeX styles; `layout.js` inside a template (the slide layout check). No programs, no Python |
+| Size | at most 2,000 files, 200 MB unpacked, 50 MB per file, no file that unpacks to more than 100 times its size |
+| Completeness | each design folder has `design.yaml`, each template folder `template.yaml` |
+
+`pack.yaml` (optional) gives `name`, `version` and `description`; `sb pack export NAME.zip`
+writes one. An install records the pack in `<registry>/packs/<name>.yaml`, and ids that were
+already installed are replaced and listed as such.
 
 The checkout ships one neutral design and two renderers without dependencies (`markdown`,
 `text`). An organisation's design is never part of the checkout: it lives in a pack that the

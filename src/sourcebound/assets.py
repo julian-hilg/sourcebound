@@ -208,7 +208,10 @@ def new_template(ident: str, kind: str, *, title: str = "", design_id: str | Non
 
 # ------------------------------------------------------------------ packs
 def install_pack(folder: str | Path) -> dict[str, list[str]]:
-    """Copy the designs and templates of a pack folder into the registry (replacing same ids)."""
+    """Copy the designs and templates of a pack folder (or a checked .zip, see packzip) into the registry."""
+    if str(folder).lower().endswith(".zip"):
+        from . import packzip
+        return packzip.install(folder)
     src = Path(folder).expanduser().resolve()
     out: dict[str, list[str]] = {"designs": [], "templates": []}
     for kind in out:
@@ -226,7 +229,14 @@ def install_pack(folder: str | Path) -> dict[str, list[str]]:
 
 
 def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str]) -> Path:
-    """Write the named designs and templates as a pack folder (to carry to another machine)."""
+    """Write the named designs and templates as a pack folder, or as a .zip (to carry to another machine)."""
+    if str(folder).lower().endswith(".zip"):
+        import tempfile
+
+        from . import packzip
+        with tempfile.TemporaryDirectory(prefix="sb-pack-") as tmp:
+            export_pack(tmp, designs_=designs_, templates_=templates_)
+            return packzip.export(folder, Path(tmp))
     dest = Path(folder).expanduser().resolve()
     for kind, ids in (("designs", designs_), ("templates", templates_)):
         for ident in ids:
