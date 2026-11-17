@@ -509,8 +509,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=3600" if cache else "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True             # the browser went away (a reload, a closed tab): nothing to answer
 
     def _json(self, value, code: int = 200) -> None:
         self._send(code, json.dumps(value, ensure_ascii=False, default=str).encode("utf-8"), "application/json; charset=utf-8")
@@ -698,13 +701,45 @@ def build_frontend() -> None:
             raise RuntimeError(f"`npm {' '.join(step)}` failed in {front}")
 
 
+class Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind the same port silently, and requests then
+    # go to either one; there the port is taken exclusively, so a second start fails and says so.
+    allow_reuse_address = sys.platform != "win32"
+    daemon_threads = True
+
+    def server_bind(self):
+        import socket
+        if sys.platform == "win32":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+def running(port: int = PORT) -> dict | None:
+    """The health answer of a Sourcebound web view already listening on this port, else None."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1.5) as r:
+            body = json.loads(r.read().decode("utf-8"))
+        return body if body.get("name") == "sourcebound-ui" else None
+    except (OSError, ValueError):
+        return None
+
+
 def serve(port: int = PORT, *, open_browser: bool = True, bridge: bool = True) -> None:
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("font/woff2", ".woff2")
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    server.daemon_threads = True
-    child = _bridge() if bridge else None
     url = f"http://127.0.0.1:{port}"
+    if running(port):                                # a second start (the desktop icon twice): use the first
+        print(f"Sourcebound web view is already running: {url}", flush=True)
+        if open_browser:
+            import webbrowser
+            webbrowser.open(url)
+        return
+    try:
+        server = Server(("127.0.0.1", port), Handler)
+    except OSError as e:
+        raise SystemExit(f"sb ui: port {port} is in use by another program ({e.strerror or e}); try --port") from None
+    child = _bridge() if bridge else None
     print(f"Sourcebound web view: {url}  (data root {config.hub().lake_root}; Ctrl+C stops it)")
     print("agent bridge: " + ("started on 127.0.0.1:8787" if child else "not started" + ("" if not bridge else
           " (needs Node.js and `npm install` in the frontend folder; the web view works without it)")), flush=True)

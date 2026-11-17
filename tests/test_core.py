@@ -882,6 +882,22 @@ name: analyst  % not a comment
     assert "```\nname: analyst  % not a comment\n  -- kept as written\n```" in md
 
 
+def test_web_view_starts_once_per_port(monkeypatch, capsys):
+    from sourcebound import ui
+    first = ui.Server(("127.0.0.1", 0), ui.Handler)
+    try:
+        port = first.server_address[1]
+        with pytest.raises(OSError):                               # Windows too: no second listener on the port
+            ui.Server(("127.0.0.1", port), ui.Handler)
+        opened = []
+        monkeypatch.setattr(ui, "running", lambda p: {"name": "sourcebound-ui"})
+        monkeypatch.setattr("webbrowser.open", opened.append)
+        ui.serve(port, bridge=False)                               # the desktop icon twice: the first one is used
+        assert opened == [f"http://127.0.0.1:{port}"] and "already running" in capsys.readouterr().out
+    finally:
+        first.server_close()
+
+
 def test_markdown_reads_tables_layout_and_boxes_without_latex():
     from sourcebound.handover import macros, to_markdown
     defs = macros(r"\newcommand\keyfig[2]{\textbf{\large #1}\par\smallskip{\footnotesize #2}}")
