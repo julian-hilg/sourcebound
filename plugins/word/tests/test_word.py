@@ -636,3 +636,19 @@ def test_german_quotes_and_column_widths():
     a, b, c = column_shares(rows, capacity=60)
     assert abs(a + b + c - 1) < 1e-9 and a > b > c                     # more text, more room ...
     assert b * 60 >= len("Standarddepot") + 2                          # ... but every column holds its longest word
+    a, b = column_shares([["Spalte A", "Spalte B"], ["Ein langer Text, der umbrechen darf und dafür viel Platz braucht", "x"]], capacity=90)
+    assert b * 90 >= len("Spalte B") + 3                               # a short header stays on one line, margins included
+
+
+def test_headings_keep_their_levels_below_a_title(desk, tmp_path):
+    from sourcebound import assets, config, render as core
+    from sourcebound_word import ooxml, render
+    p = config.project(desk)
+    doc = core.Document(project=p, name="paper", kind="deliverable", title="A Paper", lang="en", folder=desk / "deliverables" / "paper",
+                        sections=[core.Section("01", "# A Paper\n\n## One\n\nText.\n\n### One one\n\nText.\n\n#### One one one\n\nText.\n")])
+    out = tmp_path / "out"
+    out.mkdir()
+    d = Document(str(render.render(doc, assets.template("report"), assets.design(None), out)[0]))
+    style = {ooxml.plain(x): x.find(f"{qn('w:pPr')}/{qn('w:pStyle')}") for x in body_paragraphs(d)}
+    level = lambda t: style[t].get(qn("w:val")) if style.get(t) is not None else None
+    assert (level("One"), level("One one"), level("One one one")) == ("Heading1", "Heading2", "Heading3")

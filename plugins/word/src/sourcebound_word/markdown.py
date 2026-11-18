@@ -147,7 +147,9 @@ def blocks(text: str, *, known=None) -> list[dict]:
         p = paras[i]
         head, fig, tab = _HEAD.match(p) if "\n" not in p else None, _FIG.match(p.strip()), _TABLE.match(p.strip())
         if head:
-            out.append({"type": "heading", "level": min(len(head.group(1)), 3), "spans": sp(head.group(2).strip()),
+            # the full level: a document whose first heading is its title moves every heading up by one,
+            # so capping here would merge ### and #### (the renderer caps at the styles it has)
+            out.append({"type": "heading", "level": len(head.group(1)), "spans": sp(head.group(2).strip()),
                         "label": head.group(3), "md": p})
         elif fig:
             out.append({"type": "figure", "file": fig.group(2).split("/")[-1], "caption": sp(re.sub(r"\s+", " ", fig.group(1))),

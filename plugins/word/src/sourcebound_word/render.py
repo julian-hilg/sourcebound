@@ -43,6 +43,9 @@ def _plain(spans: list[dict]) -> str:
     return "".join(s.get("s", "") if s["t"] in ("text", "math") else "" for s in spans)
 
 
+SHORT_CELL = 16          # characters: a cell this short is kept on one line
+
+
 def column_shares(rows: list[list[str]], capacity: float = 100) -> list[float]:
     """Parts of the table width per column. Each column first gets room for its longest word (a word broken
     over lines reads badly; a compound breaks at its hyphen), the rest of the line goes to the columns
@@ -53,7 +56,10 @@ def column_shares(rows: list[list[str]], capacity: float = 100) -> list[float]:
     for c in range(width):
         cells = [plain(r[c] if c < len(r) else "") for r in rows]
         words = [w for x in cells for w in re.split(r"\s+|(?<=-)", x) if w]
-        least.append(max((len(w) for w in words), default=1) + 2)
+        # a short cell (a header, a number, "T+2") stays on one line: it is not broken at its spaces;
+        # + 3 characters for the cell's margins
+        short = [len(x.strip()) for x in cells if len(x.strip()) <= SHORT_CELL]
+        least.append(max([*(len(w) for w in words), *short], default=1) + 3)
         want.append(min(sum(len(x) for x in cells) / max(len(cells), 1) + 2, 45))
     rest = capacity - sum(least)
     more = [max(w - m, 0) for w, m in zip(want, least)]
@@ -309,7 +315,7 @@ class Writer:
         return p
 
     def heading(self, b: dict, group: int) -> None:
-        role = f"heading{b['level']}"
+        role = f"heading{min(max(b['level'], 1), 3)}"           # the template has three heading styles
         p = self.para(role if self.styles.get(role) is not None else "body", group)
         self.spans(p, b["spans"], bold=self.styles.get(role) is None)
 
