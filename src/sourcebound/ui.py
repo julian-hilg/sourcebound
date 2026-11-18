@@ -843,6 +843,29 @@ def running(port: int = PORT) -> dict | None:
         return None
 
 
+def ensure_running(port: int = PORT, *, wait: float = 20.0) -> tuple[str, bool]:
+    """(the web view's address, whether it was started now). Starts `sb ui` as a process of its own,
+    in the background and without a browser, when none answers on the port; the caller opens the page."""
+    import time
+    url = f"http://127.0.0.1:{port}"
+    if running(port):
+        return url, False
+    cmd = [sys.executable, "-m", "sourcebound.cli", "ui", "--port", str(port), "--no-open"]
+    kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+                "cwd": str(config.home() or Path.home())}
+    if sys.platform == "win32":                      # its own console-less process group: it outlives this command
+        kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+    else:
+        kw["start_new_session"] = True
+    subprocess.Popen(cmd, **kw)
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline:
+        if running(port):
+            return url, True
+        time.sleep(0.4)
+    raise RuntimeError(f"the web view did not start on port {port} within {wait:.0f} s; start it with `sb ui` to see why")
+
+
 def serve(port: int = PORT, *, open_browser: bool = True, bridge: bool = True) -> None:
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("font/woff2", ".woff2")

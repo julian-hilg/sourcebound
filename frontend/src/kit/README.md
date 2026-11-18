@@ -32,6 +32,7 @@ Rules they follow:
 | `ConfirmButton` | a button that asks once more in place ("Really? Yes / No") | actions with an effect outside the app |
 | `Agenda` | dated items day by day, empty days included, preferred weekdays marked | publishing schedule, job runs, deadlines |
 | `PostPreview` | a feed card: author line, text clamped with "…more", image or page carousel, character count | checking a post before it is published elsewhere |
+| `SlideGrid` | rendered slides, large and numbered with their titles; one selectable | talking about single slides ("slide 3 …") with a person or an agent |
 | `Swatches` | colours of a palette | showing a design |
 | `format.ts` | `bytes`, `number`, `toCsv`, `copy` | — |
 

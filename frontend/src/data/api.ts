@@ -681,6 +681,8 @@ export interface Piece {
   error?: string;
   text: string;
   data_files: string[];
+  /** The content of those files by name without ".yaml" (e.g. slides), for the Slides view and its agents. */
+  data?: Record<string, string>;
   renders: PieceRender[];
 }
 

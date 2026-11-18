@@ -386,6 +386,13 @@ def cmd_install(a):
         for d in sorted(x for x in (src / "skills").iterdir() if (x / "SKILL.md").exists()):
             how.add(_place(d, claude / "skills" / d.name))
             print(f"playbook {d.name} -> {claude / 'skills' / d.name}")
+        try:                                        # and those of installed packs (an organisation's own playbooks)
+            from . import assets
+            for d in assets.pack_skills():
+                how.add(_place(d, claude / "skills" / d.name))
+                print(f"playbook {d.name} (from a pack) -> {claude / 'skills' / d.name}")
+        except Exception:
+            pass                                    # no configuration yet: the checkout's playbooks are enough
     if "agents" in what:
         # the file prefix avoids clashes with your own agents; the agent names stay unchanged
         for f in sorted((src / ".claude" / "agents").glob("*.md")):

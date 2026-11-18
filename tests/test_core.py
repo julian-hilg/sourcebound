@@ -1461,6 +1461,32 @@ def test_a_private_plugin_is_loaded_from_its_folder_and_survives_a_sync(tmp_path
     assert plugins.folders() == [] and "firm" not in plugins.load(fresh=True).chart_renderers
 
 
+def test_a_pack_brings_a_playbook_for_claude_code(desk, tmp_path, monkeypatch, capsys):
+    import zipfile
+    from sourcebound import assets, packzip
+    from sourcebound.cli import main
+    home = tmp_path / "home"
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+    pack = tmp_path / "firm-pack"
+    (pack / "skills" / "firm-posts").mkdir(parents=True)
+    (pack / "skills" / "firm-posts" / "SKILL.md").write_text("---\nname: firm-posts\ndescription: Firm posts.\n---\n\nRules.\n", encoding="utf-8")
+    main(["pack", "install", str(pack)])
+    out = capsys.readouterr().out
+    assert "skill firm-posts ->" in out
+    assert (home / ".claude" / "skills" / "firm-posts" / "SKILL.md").read_text(encoding="utf-8").endswith("Rules.\n")
+    assert [d.name for d in assets.pack_skills()] == ["firm-posts"]
+    z = assets.export_pack(tmp_path / "firm.zip", designs_=[], templates_=[], skills_=["firm-posts"])
+    assert packzip.check(z)["skills"] == ["firm-posts"]
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("pack.yaml", "name: firm\n")
+        zf.writestr("skills/firm-posts/SKILL.md", "x")
+        zf.writestr("skills/firm-posts/run.py", "print(1)")
+    with pytest.raises(ValueError, match="a skill holds text only"):
+        packzip.check(bad)
+
+
 def test_a_piece_adjusts_its_own_style_within_the_design(desk):
     from sourcebound import config, render
     from sourcebound.cli import main

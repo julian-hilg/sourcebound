@@ -193,8 +193,8 @@ works on* turns this off.
 ```sh
 sb plugin list
 sb design list | show ID | new ID --name "Organisation"
-sb template list | new ID --kind KIND --design ID | add FOLDER
-sb pack install FOLDER|FILE.zip | export FOLDER|FILE.zip --design ID --template ID
+sb template list | new ID --kind KIND --design ID | add FOLDER | guide ID
+sb pack install FOLDER|FILE.zip | export FOLDER|FILE.zip --design ID --template ID --skill ID
 sb render TARGET --template ID          # TARGET: a piece id, or deliverables/<name>
 ```
 
@@ -227,6 +227,14 @@ An organisation that prefers an installable package over a folder wraps its pack
 private plugin: `register(api)` calls `api.pack(folder)`, and its designs and templates are
 found on every machine where the package is installed, with no `sb pack install`. The registry
 of a machine still wins over a plugin's pack, so one machine can try a change first.
+
+A pack may also bring playbooks for Claude Code: `skills/<id>/SKILL.md` (text only, no
+programs). `sb pack install` copies them into the registry and into `~/.claude/skills`, so an
+agent knows the organisation's rules for its formats (which template for which post, what is
+never cited); `sb install skill` places them again, and `sb pack export … --skill ID` puts one in
+a pack zip. Such a playbook can bring up the web view: `sb piece open ID --browser` starts it if
+needed and shows the piece in the *Post studio* workspace, where the *Slides* tab shows each
+slide large and the app's assistant, beside it, changes a selected slide on request.
 
 A Word template can say `sources: {word: store}` in its `template.yaml` (the default): the cited
 sources are then also in Word's own store (References > Manage Sources), so a person can cite

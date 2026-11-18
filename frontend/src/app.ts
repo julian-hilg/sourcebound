@@ -91,6 +91,17 @@ const desk: WorkspaceSeed = {
   },
 };
 
+/** Posts with the assistant beside them: the slides large, the text and preview as tabs, the assistant to change them. */
+const studio: WorkspaceSeed = {
+  name: "Post studio",
+  links,
+  shell,
+  instances: [{ id: "pieces-1", toolId: "pieces", link: "1", state: { tab: "slides" } }, ...linked("projects"), { id: "chat-1", toolId: "chat" }],
+  layout: {
+    root: split("root", "horizontal", 100, [tabs("left", 66, ["pieces-1"]), tabs("right", 34, ["chat-1", "projects-1"])]),
+  },
+};
+
 /** The data side: what is in the lake, a console on it, where it comes from. */
 const data: WorkspaceSeed = {
   name: "Data",
@@ -176,7 +187,7 @@ For the *Agents* tab of *Project*, run \`sb install hooks\` once. An agent conne
 
 ## Workspaces
 
-*Study*: one study at a glance. *Overview*: all projects and activity. *Evidence*: the ledger beside the project. *Reading*: a deliverable with its numbers and reviews. *Desk*: the pieces of a desk, written, previewed and scheduled. *Data*: lake, console and sources. *System*: what is installed and what runs. Switch under *Workspaces* in the rail; arrange panels freely and save your own. Saved workspaces from before the tabs lose the panels that became tabs: open *Workspaces* and pick a preset again.
+*Study*: one study at a glance. *Overview*: all projects and activity. *Evidence*: the ledger beside the project. *Reading*: a deliverable with its numbers and reviews. *Desk*: the pieces of a desk, written, previewed and scheduled. *Post studio*: a post's slides large, with the assistant beside them: select a slide and say what to change. *Data*: lake, console and sources. *System*: what is installed and what runs. Switch under *Workspaces* in the rail; arrange panels freely and save your own. Saved workspaces from before the tabs lose the panels that became tabs: open *Workspaces* and pick a preset again.
 `;
 
 // ---- the app ---------------------------------------------------------------------
@@ -225,7 +236,7 @@ export const werkbank = new Werkbank({
   },
   storage: localStorage,
   defaultWorkspace: study,
-  presets: { Study: study, Overview: overview, Evidence: evidence, Reading: reading, Desk: desk, Data: data, System: system },
+  presets: { Study: study, Overview: overview, Evidence: evidence, Reading: reading, Desk: desk, "Post studio": studio, Data: data, System: system },
 });
 
 // Settings that code outside React needs (the data store, formatters, describe) are carried into `prefs`.

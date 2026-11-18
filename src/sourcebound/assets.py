@@ -274,10 +274,11 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
     src = Path(folder).expanduser().resolve()
     reg = config.hub().registry
     records = pack_records()
-    out: dict = {"designs": [], "templates": [], "replaced": [], "changed": [], "unchanged": []}
-    for kind in ("designs", "templates"):
+    out: dict = {"designs": [], "templates": [], "skills": [], "replaced": [], "changed": [], "unchanged": []}
+    marker = {"designs": "design.yaml", "templates": "template.yaml", "skills": "SKILL.md"}
+    for kind in ("designs", "templates", "skills"):
         for d in sorted((src / kind).glob("*")):
-            if (d / f"{kind[:-1]}.yaml").exists():
+            if (d / marker[kind]).exists():
                 dest = reg / kind / d.name
                 if dest.exists():
                     out["replaced"].append(f"{kind[:-1]} {d.name}")
@@ -291,8 +292,8 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(d, dest, ignore=shutil.ignore_patterns(*PACK_IGNORE))
                 out[kind].append(d.name)
-    if not out["designs"] and not out["templates"]:
-        raise FileNotFoundError(f"{src} holds neither designs/<id>/design.yaml nor templates/<id>/template.yaml")
+    if not out["designs"] and not out["templates"] and not out["skills"]:
+        raise FileNotFoundError(f"{src} holds neither designs/<id>/design.yaml, templates/<id>/template.yaml nor skills/<id>/SKILL.md")
     if provenance is None:                       # a folder: its own pack.yaml, else the folder's name
         manifest = {}
         if (src / "pack.yaml").is_file():
@@ -303,35 +304,43 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
     out["pack"] = {**provenance, "files": sum(1 for f in src.rglob("*") if f.is_file() and not _ignored(f.relative_to(src)))}
     # the same pack installed before: did its content change? (content, so that a zip and the
     # folder it was made from count as the same pack)
-    content = tree_sha256(src, only=("designs", "templates"))
+    content = tree_sha256(src, only=("designs", "templates", "skills"))
     out["previous"] = next((r for r in records if r.get("name") == provenance["name"]), None)
     out["source_differs"] = bool(out["previous"] and out["previous"].get("content_sha256")
                                  and out["previous"]["content_sha256"] != content)
     from datetime import datetime, timezone
     record = {**provenance, "content_sha256": content,
               "installed": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "designs": out["designs"], "templates": out["templates"]}
+              "designs": out["designs"], "templates": out["templates"], "skills": out["skills"]}
     (reg / "packs").mkdir(parents=True, exist_ok=True)
     config.write_atomic(reg / "packs" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', record['name'])}.yaml",
                         yaml.safe_dump(record, sort_keys=False, allow_unicode=True))
     return out
 
 
-def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str]) -> Path:
-    """Write the named designs and templates as a pack folder, or as a .zip (to carry to another machine)."""
+def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str], skills_: list[str] = ()) -> Path:
+    """Write the named designs, templates and skills (installed from packs) as a pack folder, or as a
+    .zip (to carry to another machine)."""
     if str(folder).lower().endswith(".zip"):
         import tempfile
 
         from . import packzip
         with tempfile.TemporaryDirectory(prefix="sb-pack-") as tmp:
-            export_pack(tmp, designs_=designs_, templates_=templates_)
+            export_pack(tmp, designs_=designs_, templates_=templates_, skills_=skills_)
             return packzip.export(folder, Path(tmp))
     dest = Path(folder).expanduser().resolve()
-    for kind, ids in (("designs", designs_), ("templates", templates_)):
+    skills = {d.name: d for d in pack_skills()}
+    for kind, ids in (("designs", designs_), ("templates", templates_), ("skills", skills_)):
         for ident in ids:
-            d = _find(kind, ident)
+            d = skills.get(ident) if kind == "skills" else _find(kind, ident)
             if d is None:
                 raise FileNotFoundError(f"no {kind[:-1]} {ident}")
             (dest / kind).mkdir(parents=True, exist_ok=True)
             shutil.copytree(d, dest / kind / ident, dirs_exist_ok=True)
     return dest
+
+
+def pack_skills() -> list[Path]:
+    """Playbooks for agents that installed packs brought (<registry>/skills/<id>/SKILL.md)."""
+    folder = config.hub().registry / "skills"
+    return sorted(d for d in folder.glob("*") if (d / "SKILL.md").is_file()) if folder.is_dir() else []

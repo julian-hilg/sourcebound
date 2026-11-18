@@ -535,6 +535,8 @@ def summary(project: config.Project | None = None) -> list[dict]:
             rel = Path(m["folder"]).relative_to(p.root).as_posix()
             rs.append({"template": m["template"], "kind": m["kind"], "design": m["design"], "at": m["at"], "notes": m.get("notes") or [],
                        "files": [f"{rel}/{x}" for x in m["files"]], "stale": render.stale(m, results.load(p))})
-        out.append({**card, "text": read_text(card["id"], p),
-                    "data_files": sorted(x.name for x in f.glob("*.yaml") if x.name != "piece.yaml"), "renders": rs})
+        files = sorted(x for x in f.glob("*.yaml") if x.name != "piece.yaml")
+        out.append({**card, "text": read_text(card["id"], p), "data_files": [x.name for x in files],
+                    # the content too (small files: a deck is a few kB), so the web view and its agents see what a slide says
+                    "data": {x.stem: x.read_text(encoding="utf-8")[:200_000] for x in files}, "renders": rs})
     return out

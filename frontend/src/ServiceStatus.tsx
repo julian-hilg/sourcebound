@@ -1,6 +1,6 @@
 import { useSetting, useWerkbank } from "@werkbank/framework";
 import { useEffect, useRef } from "react";
-import { paths, useApi, useOnline } from "./data/api";
+import { api, paths, useApi, useOnline, type Pieces } from "./data/api";
 import { show } from "./tools/lib";
 
 /** Status bar item: whether the Sourcebound service (`sb ui`) answers. Clicking reloads the data. */
@@ -30,12 +30,12 @@ interface Focus {
 /**
  * Shows the piece an agent is working on. `sb piece open ID` and every render of a piece write the
  * focus (<data root>/activity/focus.json); a newer one selects that project and piece for the
- * linked panels and brings up the post preview. Off under Settings, Pieces.
+ * linked panels and brings up its slides (or its post preview). Off under Settings, Pieces.
  */
 function FollowFocus() {
   const wb = useWerkbank();
   const [follow] = useSetting<boolean>("pieces.follow");
-  const [deskWorkspace] = useSetting<string>("projects.deskWorkspace");
+  const [workspace] = useSetting<string>("pieces.followWorkspace");
   const entry = useApi<{ focus: Focus | null }>(follow ? paths.focus : null, 3000);
   const seen = useRef(Date.now() - RECENT_MS);
   const focus = entry.data?.focus;
@@ -45,12 +45,14 @@ function FollowFocus() {
     if (!(at > seen.current)) return;
     seen.current = at;
     void (async () => {
-      // No Pieces panel here: the desk workspace has room for the preview (the selection survives the switch).
-      if (!wb.openPanelOf("pieces")) await wb.run("workspace.preset", { name: deskWorkspace || "Desk" });
+      // No Pieces panel here: the post studio has room for the slides (the selection survives the switch).
+      if (!wb.openPanelOf("pieces")) await wb.run("workspace.preset", { name: workspace || "Post studio" });
       await wb.run("link.publish", { group: "1", topic: "project", value: focus.project });
       await wb.run("link.publish", { group: "1", topic: "piece", value: focus.piece });
-      await show(wb, "pieces", { link: "1", patch: { tab: "preview" } });
+      // a piece with slides opens on its slides, any other on its post preview
+      const piece = (await api.fetch<Pieces>(paths.pieces(focus.project))).pieces.find((p) => p.id === focus.piece);
+      await show(wb, "pieces", { link: "1", patch: { tab: piece?.data?.slides ? "slides" : "preview" } });
     })();
-  }, [wb, follow, focus, deskWorkspace]);
+  }, [wb, follow, focus, workspace]);
   return null;
 }

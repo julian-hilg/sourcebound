@@ -242,8 +242,14 @@ def cmd_piece(a):
         elif a.what == "open":
             x = pieces.focus(_one(a))
             from . import ui
-            print(f"the web view shows {x['project']}/{x['piece']}" if ui.running() else
-                  f"{x['project']}/{x['piece']} is shown when the web view opens (desktop icon or sb ui)")
+            if a.browser:                           # start the web view if needed and bring up the desk view
+                import webbrowser
+                url, started = ui.ensure_running()
+                webbrowser.open(url)
+                print(f"{'started the web view and ' if started else ''}opened {url}: {x['project']}/{x['piece']} in the post preview")
+            else:
+                print(f"the web view shows {x['project']}/{x['piece']}" if ui.running() else
+                      f"{x['project']}/{x['piece']} is shown when the web view opens (desktop icon, sb ui, or sb piece open ID --browser)")
         elif a.what == "export":
             r = pieces.export(_one(a), to=a.to)
             print(f"exported to {r['folder']}: {', '.join(r['files'])}")
@@ -368,6 +374,13 @@ def cmd_pack(a):
                 print(f"pack {p['name']}" + (f" {p['version']}" if p["version"] else "") + f": {p['files']} files checked")
                 print(f"from {p['source']} (sha256 {p['sha256'][:12]})")
             print(f"installed designs: {', '.join(done['designs']) or 'none'}; templates: {', '.join(done['templates']) or 'none'}")
+            if done.get("skills"):                  # playbooks for Claude Code: where Claude Code finds them
+                from .cli import _place
+                from . import config
+                claude = Path.home() / ".claude" / "skills"
+                for name in done["skills"]:
+                    how = _place(config.hub().registry / "skills" / name, claude / name)
+                    print(f"skill {name} -> {claude / name}" + (" (copied: run `sb pack install` again after an update)" if how == "copied" else ""))
             prev = done.get("previous")
             if done.get("source_differs") and prev:
                 print(f"note: the content differs from what was installed on {str(prev.get('installed', ''))[:10]} "
@@ -377,7 +390,7 @@ def cmd_pack(a):
             if done.get("unchanged"):
                 print("replaced, the same as installed: " + ", ".join(done["unchanged"]))
         else:
-            print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or []))
+            print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or [], skills_=a.skill or []))
     except (ValueError, OSError) as e:
         _fail(e)
 
@@ -481,6 +494,7 @@ def add_parsers(sub) -> None:
     s = sub.add_parser("piece"); s.add_argument("what", choices=["list", "add", "show", "set", "rm", "check", "due", "export", "open"])
     s.add_argument("args", nargs="*"); s.add_argument("--id"); s.add_argument("--at", help='when to publish, e.g. "2026-11-20 08:30"')
     s.add_argument("--to", help="export: the folder to export into (default: export.dir in project.yaml)")
+    s.add_argument("--browser", action="store_true", help="open: also open the web view in the browser (started if it is not running)")
     s.add_argument("--self-citation", dest="self_citation", choices=["true", "false"],
                    help="set: the piece may cite the desk's own work (own.publishers), only where the person asked for it")
     for opt in ("title", "kind", "template", "design", "status", "lang", "channel", "note", "prompt", "url"):
@@ -500,7 +514,8 @@ def add_parsers(sub) -> None:
     s.add_argument("--as", dest="as_id"); s.add_argument("--kind"); s.add_argument("--design"); s.add_argument("--title")
     s.set_defaults(f=cmd_template)
     s = sub.add_parser("pack"); s.add_argument("what", choices=["install", "export"]); s.add_argument("folder")
-    s.add_argument("--design", action="append"); s.add_argument("--template", action="append"); s.set_defaults(f=cmd_pack)
+    s.add_argument("--design", action="append"); s.add_argument("--template", action="append")
+    s.add_argument("--skill", action="append", help="export: a playbook for agents installed from a pack"); s.set_defaults(f=cmd_pack)
     s = sub.add_parser("plugin", help="installed plugins; add/remove a plugin folder (a private plugin kept outside the environment)")
     s.add_argument("what", choices=["list", "add", "remove"], nargs="?", default="list"); s.add_argument("folder", nargs="?")
     s.set_defaults(f=cmd_plugin)

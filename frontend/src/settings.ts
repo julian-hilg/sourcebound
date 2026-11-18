@@ -13,7 +13,7 @@ const choice = <T extends string>(values: readonly [T, ...T[]], labels: Record<T
   schema: z.enum(values as readonly [string, ...string[]]),
   options: values.map((value) => ({ value: value as string, label: labels[value] as string })),
 });
-export const WORKSPACES = ["Study", "Overview", "Evidence", "Reading", "Desk", "Data", "System"] as const;
+export const WORKSPACES = ["Study", "Overview", "Evidence", "Reading", "Desk", "Post studio", "Data", "System"] as const;
 const workspaceLabels = Object.fromEntries(WORKSPACES.map((w) => [w, w])) as Record<(typeof WORKSPACES)[number], string>;
 
 export const appSettings: SettingSpec<any>[] = [
@@ -63,6 +63,7 @@ export const appSettings: SettingSpec<any>[] = [
   { key: "fetchlog.maxRows", title: "Requests shown", section: "Fetch log", description: "The service returns the newest 200 per source.", schema: z.number().int().min(20).max(1000), default: 200 },
 
   // ---- pieces
+  { key: "pieces.followWorkspace", title: "Workspace for a piece an agent works on", section: "Pieces", description: "Where the app goes when it follows an agent and no Pieces panel is open.", default: "Post studio", ...choice(WORKSPACES, workspaceLabels) },
   { key: "pieces.follow", title: "Show what an agent works on", section: "Pieces", description: "When an agent renders a piece or runs `sb piece open`, select that project and piece and show its post preview.", schema: z.boolean(), default: true },
   { key: "pieces.template", title: "Template for a new piece", section: "Pieces", description: "A template id from the Assets panel. Empty: the project's own default, if it names one.", schema: z.string().max(60), default: "", control: "text" },
   { key: "pieces.kind", title: "Kind of a new piece", section: "Pieces", schema: z.string().max(30), default: "post", control: "text", suggestions: ["post", "note", "idea", "briefing", "report"] },

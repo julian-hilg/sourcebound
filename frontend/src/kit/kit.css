@@ -477,3 +477,54 @@ button.kit-grid-cell:hover {
   border-top: 1px solid var(--wb-grid);
   font-size: 12px;
 }
+
+/* ---- SlideGrid: rendered slides, numbered, one selectable ------------------------------- */
+.kit-slides {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+.kit-slide-button {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: var(--wb-radius);
+  background: var(--wb-canvas);
+  color: var(--wb-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-slide-button:hover {
+  border-color: var(--wb-grid);
+}
+.kit-slide[aria-selected="true"] .kit-slide-button {
+  border-color: var(--wb-accent);
+}
+.kit-slide-button img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--wb-grid);
+}
+.kit-slide-caption {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.35;
+}
+.kit-slide-no {
+  flex: none;
+  min-width: 1.6em;
+  padding: 0 6px;
+  border-radius: var(--wb-radius);
+  background: var(--wb-accent);
+  color: var(--wb-accent-text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

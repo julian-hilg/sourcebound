@@ -16,6 +16,7 @@ import { postPreviewTool } from "./postpreview";
 import { projectTool } from "./project";
 import { resultsTool } from "./results";
 import { scheduleTool } from "./schedule";
+import { slidesTool } from "./slides";
 import { systemTool } from "./system";
 
 /**
@@ -68,6 +69,7 @@ export const piecesHub = defineHub({
   side: { key: "list", title: "Pieces", tool: piecesTool },
   parts: [
     { key: "edit", title: "Text", tool: pieceTool },
+    { key: "slides", title: "Slides", tool: slidesTool },
     { key: "preview", title: "Post preview", tool: postPreviewTool },
     { key: "schedule", title: "Schedule", tool: scheduleTool },
   ],

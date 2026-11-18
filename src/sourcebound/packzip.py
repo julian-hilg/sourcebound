@@ -3,16 +3,18 @@
     sb pack install firm-pack.zip
     sb pack export firm-pack.zip --design firm --template firm-report
 
-A pack is data: designs and templates. A zip may hold only that:
+A pack is data: designs, templates and playbooks for agents. A zip may hold only that:
 
-* `designs/<id>/...` and `templates/<id>/...`; at the top also `pack.yaml`, `README*`, `LICENSE*`.
+* `designs/<id>/...`, `templates/<id>/...` and `skills/<id>/...` (a playbook for Claude Code:
+  `SKILL.md` and other text); at the top also `pack.yaml`, `README*`, `LICENSE*`.
   One folder around everything is allowed (a zipped pack folder).
 * no absolute paths, no `..`, no links; ids are lowercase letters, digits, `-` and `_`
 * only data file types (EXTENSIONS): no programs, no Python. The one script a template may carry is
   the layout check of a slide template (`layout.js`), which runs in the browser that lays out slides.
 * at most MAX_FILES files, MAX_TOTAL bytes unpacked, MAX_FILE per file, and no file that unpacks to
   more than MAX_RATIO times its packed size (a zip bomb)
-* every design folder has `design.yaml`, every template folder `template.yaml`
+* every design folder has `design.yaml`, every template folder `template.yaml`, every skill folder
+  `SKILL.md`; a skill holds text only (SKILL_EXTENSIONS)
 
 `pack.yaml` is optional: `name`, `version`, `description`. Installing records it in
 `<registry>/packs/<name>.yaml` with the date, the ids, the path of the zip and its sha256 (and of
@@ -43,6 +45,7 @@ EXTENSIONS = {
     ".otf", ".ttf", ".woff", ".woff2",
     ".css", ".html", ".j2", ".jinja", ".tex", ".sty", ".cls", ".bib",
 }
+SKILL_EXTENSIONS = {".md", ".txt", ".yaml", ".yml", ".json"}
 SCRIPTS = {"layout.js"}                     # allowed by name, inside a template folder only
 TOP = re.compile(r"^(pack\.ya?ml|README[^/]*|LICEN[CS]E[^/]*)$", re.I)
 ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -63,7 +66,7 @@ def check(path: str | Path) -> dict:
         total = sum(i.file_size for i in infos)
         if total > MAX_TOTAL:
             problems.append(f"{total / 1e6:.0f} MB unpacked (at most {MAX_TOTAL / 1e6:.0f} MB)")
-        ids: dict[str, set[str]] = {"designs": set(), "templates": set()}
+        ids: dict[str, set[str]] = {"designs": set(), "templates": set(), "skills": set()}
         has: set[str] = set()
         manifest = {}
         for i in infos:
@@ -89,11 +92,11 @@ def check(path: str | Path) -> dict:
                         except (yaml.YAMLError, UnicodeDecodeError) as e:
                             problems.append(f"{rel}: not readable ({e})")
                     continue
-                problems.append(f"{rel}: only designs/, templates/, pack.yaml, README and LICENSE may be at the top")
+                problems.append(f"{rel}: only designs/, templates/, skills/, pack.yaml, README and LICENSE may be at the top")
                 continue
             kind = p.parts[0]
             if kind not in ids or len(p.parts) < 3:
-                problems.append(f"{rel}: not inside designs/<id>/ or templates/<id>/")
+                problems.append(f"{rel}: not inside designs/<id>/, templates/<id>/ or skills/<id>/")
                 continue
             ident = p.parts[1]
             if not ID.match(ident):
@@ -101,19 +104,21 @@ def check(path: str | Path) -> dict:
                 continue
             ids[kind].add(ident)
             suffix = p.suffix.lower()
-            if not (suffix in EXTENSIONS or (kind == "templates" and p.name in SCRIPTS)):
+            if kind == "skills" and suffix not in SKILL_EXTENSIONS:
+                problems.append(f"{rel}: a skill holds text only ({', '.join(sorted(SKILL_EXTENSIONS))})")
+            elif not (suffix in EXTENSIONS or (kind == "templates" and p.name in SCRIPTS)):
                 problems.append(f"{rel}: file type {suffix or '(none)'} is not allowed in a pack")
-            if len(p.parts) == 3 and p.name in ("design.yaml", "template.yaml"):
+            if len(p.parts) == 3 and p.name in ("design.yaml", "template.yaml", "SKILL.md"):
                 has.add(f"{kind}/{ident}/{p.name}")
-        for kind, need in (("designs", "design.yaml"), ("templates", "template.yaml")):
+        for kind, need in (("designs", "design.yaml"), ("templates", "template.yaml"), ("skills", "SKILL.md")):
             for ident in sorted(ids[kind]):
                 if f"{kind}/{ident}/{need}" not in has:
                     problems.append(f"{kind}/{ident}: no {need}")
-        if not ids["designs"] and not ids["templates"]:
-            problems.append("neither designs/<id>/ nor templates/<id>/ in the zip")
+        if not any(ids.values()):
+            problems.append("neither designs/<id>/, templates/<id>/ nor skills/<id>/ in the zip")
     if problems:
         raise ValueError(f"pack {z.name} refused, nothing was installed:\n  " + "\n  ".join(sorted(set(problems))))
-    return {"file": str(z), "prefix": prefix, "designs": sorted(ids["designs"]), "templates": sorted(ids["templates"]),
+    return {"file": str(z), "prefix": prefix, "designs": sorted(ids["designs"]), "templates": sorted(ids["templates"]), "skills": sorted(ids["skills"]),
             "files": len(infos), "bytes": total, "name": str(manifest.get("name") or z.stem),
             "version": str(manifest.get("version") or ""), "description": str(manifest.get("description") or "")}
 
