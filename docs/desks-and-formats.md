@@ -246,6 +246,7 @@ Plugins are separate packages with their own dependencies, in `plugins/` of the 
 ```sh
 uv sync --extra word            # Word documents (python-docx)
 uv sync --extra linkedin        # slides, infographics and posts (Jinja2; a Chromium for PNG and PDF)
+uv sync --extra pptx            # the same slides as PowerPoint in a master (python-pptx; with linkedin)
 uv sync --all-extras
 ```
 
@@ -266,6 +267,7 @@ def register(api):
     api.command("video", setup_parser, run)   # adds `sb video ...`
     api.pack(Path(__file__).parent / "pack")  # designs/ and templates/ the plugin brings
     api.converter(".mp4", ".gif", to_gif)     # convert(path, out) -> Path: used by `sb deliver`
+    api.chart_renderer("firm", draw)          # charts in an organisation's style (see Charts below)
 
 def render(doc, template, design, out):       # -> list of files written below `out`
     ...
@@ -276,6 +278,22 @@ def render(doc, template, design, out):       # -> list of files written below `
 Helpers: `render.fill` (numbers in, citations formatted by a callback), `render.cited`,
 `render.source_line`, `render.cite_label`, `render.plain_text`. A renderer writes only below
 `out`; the core adds `render.json` with the values shown, so staleness can be detected later.
+
+### Charts
+
+`sourcebound.charts` draws one chart block (`bars`, `columns`, `line`, `gantt`, `day`/`timeline`,
+`windows`, in the vocabulary of `slides.yaml`) as a PNG or SVG in a design's style:
+`charts.render(block, design=..., width_px=..., height_px=..., out=..., lang=...)`, and
+`charts.check(block)` lists what is wrong with a block. It knows nothing of decks or formats, so
+the PowerPoint plugin, a Word renderer or a figure file use it the same way. The built-in renderer
+takes colours, palette, fonts (the design's font files first; `charts.fonts` for files only charts
+use) and `charts.gridlines` from the design.
+
+An organisation's chart style is code, and a pack holds no code. So a design names a renderer,
+`charts: {renderer: firm}`, and a private plugin provides it with `api.chart_renderer("firm", draw)`.
+`draw` has the signature of `charts.render`; it may draw everything itself or pass a `charts.Style`
+of its own to `charts.draw`. Without the plugin the built-in renderer draws, and the render says
+so. See `plugins/pptx/README.md`.
 
 ### Delivering
 

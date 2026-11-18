@@ -30,6 +30,7 @@ sql = ["connectorx>=0.4"]        # sources.query by URI (SQL Server, Postgres, .
 # Output formats beyond LaTeX are plugins with their own dependencies (plugins/ in the checkout):
 word = ["sourcebound-word"]          # Word documents from .docx/.dotx templates, with a round trip
 linkedin = ["sourcebound-linkedin"]  # slides, infographics and posts (HTML templates; a Chromium for PNG and PDF)
+pptx = ["sourcebound-pptx"]          # slides as PowerPoint in a master (python-pptx; needs linkedin for the deck format)
 
 [project.scripts]
 sb = "sourcebound.cli:main"
@@ -37,6 +38,7 @@ sb = "sourcebound.cli:main"
 [tool.uv.sources]
 sourcebound-word = { path = "plugins/word", editable = true }
 sourcebound-linkedin = { path = "plugins/linkedin", editable = true }
+sourcebound-pptx = { path = "plugins/pptx", editable = true }
 
 [build-system]
 requires = ["hatchling"]

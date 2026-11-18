@@ -378,6 +378,7 @@ def cmd_plugin(a):
     for p in reg.plugins:
         print(f"{p.name:<14} {p.package} {p.version}  " + (f"ERROR: {p.error}" if p.error else
               f"renders: {', '.join(p.renderers) or '-'}; commands: {', '.join(p.commands) or '-'}"
+              + (f"; charts: {', '.join(p.chart_renderers)}" if p.chart_renderers else "")
               + (f"; brings {len(p.packs)} pack" if p.packs else "")))
     print(f"{len(reg.plugins)} plugins; formats: {', '.join(sorted(reg.renderers))}")
     if not reg.plugins:

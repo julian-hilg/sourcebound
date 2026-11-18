@@ -8,6 +8,7 @@ when you need it.
 | **Core** | the `sb` command, the agents and playbooks for Claude Code, studies and desks, the data lake, LaTeX deliverables, the format-neutral handover | [uv](https://docs.astral.sh/uv/), git |
 | **Word** (optional) | Word documents from `.docx`, `.dotx` and `.dotm` templates, with a round trip for files edited in Word | `uv sync --extra word` |
 | **Slides and posts** (optional) | slides, infographics and post text from HTML templates, with a layout check | `uv sync --extra linkedin`, and Chrome, Edge or Chromium for PNG and PDF |
+| **PowerPoint** (optional) | the same slides as a `.pptx` in a template's master, with editable text | `uv sync --extra linkedin --extra pptx` |
 | **Web view** (optional) | a local frontend over all projects, the data lake and what is installed | Node.js 22 or newer (on Windows also inside WSL) |
 
 ## Requirements

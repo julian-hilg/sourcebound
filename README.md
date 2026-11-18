@@ -170,6 +170,7 @@ flowchart LR
 | Markdown, plain text | the core | a piece or a deliverable with numbers filled in and sources listed | `sb render <target> --template text` |
 | Word | [`plugins/word`](plugins/word/README.md) | `.docx` from a `.docx`, `.dotx` or `.dotm` template | numbers and citations stay linked after editing in Word: `sb word status`, `refresh`, `pull` |
 | Slides and posts | [`plugins/linkedin`](plugins/linkedin/README.md) | HTML, one PNG per slide, a carousel PDF, post text | the render fails when text overflows or labels collide |
+| PowerPoint | [`plugins/pptx`](plugins/pptx/README.md) | the same deck as one `.pptx` in a template's master, text editable, charts as images | the render fails when text does not fit; charts in the design's style (`sourcebound.charts`) |
 
 ```sh
 uv sync --extra word --extra linkedin
@@ -240,7 +241,7 @@ Details: [docs/frontend.md](docs/frontend.md).
 | `.claude/agents/` | eight subagents: `scout`, `librarian`, `data-scout`, `pipeline-engineer`, `analyst`, `verifier`, `referee`, `writer` |
 | `skills/` | the lead's playbooks: `research-study` and `content-desk` |
 | `src/sourcebound/` | the Python package and the `sb` command |
-| `plugins/word`, `plugins/linkedin` | the optional formats, each a package of its own |
+| `plugins/word`, `plugins/linkedin`, `plugins/pptx` | the optional formats, each a package of its own |
 | `frontend/` | the optional web view |
 | `templates/project/` | a complete worked study (fat tails of EUR/USD) that `sb new` copies |
 | `templates/markdown`, `templates/text`, `designs/sourcebound` | the formats that need no plugin, and the neutral design |
