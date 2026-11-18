@@ -30,7 +30,6 @@ checkout), and you opened the app and used the feature in every theme and in a n
 - `src/reader/markup.ts`: turns handover Markdown into numbered blocks and links; no React
 - `src/app.css`: the app's styles, prefix `sb-`; `src/kit/kit.css`: the kit's, prefix `kit-`
 - `../src/sourcebound/ui.py`: the data service
-- `vendor/`: the Werkbank packages as tarballs, until Werkbank publishes a release
 
 ## Panels: tools and hubs
 

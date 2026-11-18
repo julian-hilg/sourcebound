@@ -113,10 +113,8 @@ has no data of its own; every action is a command that does what an `sb` command
 elements that do not know Sourcebound live in `frontend/src/kit/`.
 
 Werkbank is a dependency (`@werkbank/framework`, `@werkbank/bridge`) and is never edited
-here. It had not published a release when this was written, so the two packages are in
-`frontend/vendor/` as the tarballs that Werkbank's `npm run pack` writes (version 0.6.0, MIT).
-Once a release exists, `npm run werkbank:update` in `frontend/` moves to it and the folder
-can go.
+here. The two packages come from Werkbank's GitHub releases (MIT); `npm run werkbank:update`
+in `frontend/` moves to the newest release, `npm run werkbank:update -- 0.7.0` to a given one.
 
 ## Known limits
 

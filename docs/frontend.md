@@ -137,9 +137,8 @@ npm run typecheck && npm run build
 ```
 
 Werkbank is a dependency (`@werkbank/framework`, `@werkbank/bridge`), never edited here.
-Werkbank had not published a release when this was built, so the two packages are in
-`frontend/vendor/` as the tarballs its `npm run pack` writes (version 0.6.0). Once a release
-exists, `npm run werkbank:update` moves the app to it and the folder can go.
+The two packages come from Werkbank's GitHub releases; `npm run werkbank:update` moves the
+app to the newest one.
 
 ## Limits
 
