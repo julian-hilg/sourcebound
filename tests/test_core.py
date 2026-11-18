@@ -1390,6 +1390,11 @@ def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tm
     manifest.write_text(saved.replace('"files": [', '"files": ["gone_slide_1.png", '), encoding="utf-8")
     with pytest.raises(ValueError, match="the render is incomplete"):             # a render being rewritten: nothing saved
         pieces.export("20261118-etf-kosten", p)
+    # a renderer's helper images in a subfolder (a PowerPoint render's charts/) are not slides
+    (Path(m["folder"]) / "charts").mkdir()
+    (Path(m["folder"]) / "charts" / "deck_s2_chart.png").write_bytes(b"png")
+    manifest.write_text(saved.replace('"files": [', '"files": ["charts/deck_s2_chart.png", '), encoding="utf-8")
+    assert pieces.export("20261118-etf-kosten", p)["files"] == ["post.txt"]
     manifest.write_text(saved, encoding="utf-8")
     assert (out / "post.txt").read_text(encoding="utf-8").startswith("Kosten sinken.")
     assert json.loads((out / pieces.MARKER).read_text(encoding="utf-8"))["piece"] == "20261118-etf-kosten"

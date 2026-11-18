@@ -523,7 +523,7 @@ def export(piece_id: str, project: config.Project | None = None, *, to: str | Pa
         raise ValueError(f"{piece_id} has no render yet: sb render {piece_id} --template ID")
     # a render that lists a file it does not hold is incomplete (or being rewritten right now): save nothing
     missing = [f"{m['template']}/{n}" for m in newest.values() for n in m.get("files") or []
-               if Path(n).suffix.lower() in EXPORT_SUFFIXES and not (Path(m["folder"]) / n).is_file()]
+               if "/" not in n.replace("\\", "/") and Path(n).suffix.lower() in EXPORT_SUFFIXES and not (Path(m["folder"]) / n).is_file()]
     if missing:
         raise ValueError(f"the render is incomplete ({', '.join(missing[:3])} missing; is it being rendered right now?): "
                          f"render again, then save; nothing was saved")
@@ -534,7 +534,9 @@ def export(piece_id: str, project: config.Project | None = None, *, to: str | Pa
         src = Path(m["folder"])
         for name in m.get("files") or []:
             f = src / name
-            if f.is_file() and f.suffix.lower() in EXPORT_SUFFIXES and f.name not in written:
+            # only what lies directly in the render folder: a subfolder holds a renderer's helpers
+            # (the chart images a PowerPoint render places), not slides
+            if "/" not in name.replace("\\", "/") and f.is_file() and f.suffix.lower() in EXPORT_SUFFIXES and f.name not in written:
                 shutil.copy2(f, dest / f.name)
                 written.append(f.name)
         pv = src / "preview.json"
