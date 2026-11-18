@@ -718,7 +718,7 @@ def _show_text(text: str, a, what: str) -> None:
     if a.out:
         out = Path(a.out).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
+        out.write_text(text, encoding="utf-8", newline="")     # as read: no second \r on Windows
         print(f"wrote {out} ({len(text):,} characters, the whole text of {what})")
         if not a.grep:
             return

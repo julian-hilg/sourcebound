@@ -3,6 +3,7 @@
     git pull --ff-only                  the checkout (refused over uncommitted changes)
     uv sync --extra ... (as before)     `uv sync` installs exactly the extras it is given and removes
                                         the others, so the extras installed now are named again
+                                        (Windows: --inexact --no-install-project, see `plan`)
     sb install                          launcher, playbooks and subagents (copies on Windows)
     frontend build                      only where the web view was built before
     sb doctor
@@ -51,6 +52,11 @@ def plan(home: Path, wanted: list[str], *, pull: bool = True, frontend: bool | N
     if pull:
         steps.append(("pull the checkout", ["git", "-C", str(home), "pull", "--ff-only"]))
     sync = [uv, "sync"]                                # run in the checkout (cwd), see `run`
+    if sys.platform == "win32":
+        # Windows cannot replace or rename the sb.exe running this update, and uv rewrites it whenever
+        # it reinstalls Sourcebound itself.  Leave Sourcebound installed as it is (an editable install:
+        # the pulled code is used anyway) and only bring its dependencies and plugins up to date.
+        sync += ["--inexact", "--no-install-project"]
     for e in wanted:
         sync += ["--extra", e]
     steps.append(("install the packages" + (f" (extras: {', '.join(wanted)})" if wanted else ""), sync))

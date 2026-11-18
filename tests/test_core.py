@@ -4,6 +4,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -961,7 +962,8 @@ def test_update_keeps_the_installed_extras_and_refuses_over_changes(tmp_path, mo
     assert steps == ["pull the checkout", "install the packages (extras: yaml)", "install sb, playbooks and subagents",
                      "build the web view", "check the installation"]
     sync = dict(update.plan(home, ["yaml"]))["install the packages (extras: yaml)"]
-    assert sync[1:] == ["sync", "--extra", "yaml"]                               # run inside the checkout
+    windows = ["--inexact", "--no-install-project"] if sys.platform == "win32" else []   # sb.exe is in use
+    assert sync[1:] == ["sync", *windows, "--extra", "yaml"]                     # run inside the checkout
     assert "build the web view" not in dict(update.plan(home, [], frontend=False))
     with pytest.raises(SystemExit, match="no extra nope"):
         update.run(home, add=["nope"], dry_run=True)
