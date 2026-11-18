@@ -154,14 +154,14 @@ is set per desk, else for the machine (`[pieces] export_dir` in the user configu
 
 ```yaml
 export:
-  dir: "U:/Marketing/LinkedIn"     # must exist
+  dir: "D:/Shared/LinkedIn"       # must exist
   name: "{date}_{slug}"            # {date}: planned posting day, else today (YYYYMMDD); {slug}; {id}
 ```
 
 ```toml
 # ~/.config/sourcebound/config.toml: the standard folder of this machine
 [pieces]
-export_dir = "U:/Marketing/LinkedIn"
+export_dir = "D:/Shared/LinkedIn"
 ```
 
 `--to FOLDER` (or another folder typed under *Save as…*) saves elsewhere. An export writes `.sourcebound-export.json` with the

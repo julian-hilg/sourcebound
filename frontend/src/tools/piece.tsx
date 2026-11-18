@@ -240,7 +240,7 @@ function PiecePanel() {
                 <label className="wb-control-label" htmlFor="piece-save-to">
                   Folder
                 </label>
-                <input id="piece-save-to" className="wb-input" value={saveTo} placeholder="U:/Marketing/LinkedIn" onChange={(e) => setSaveTo(e.target.value)} />
+                <input id="piece-save-to" className="wb-input" value={saveTo} placeholder="D:/Shared/LinkedIn" onChange={(e) => setSaveTo(e.target.value)} />
                 <div className="wb-hint">
                   Writes {(saveTo.trim() || "…").replace(/[\\/]+$/, "")}/{exportName}: post.txt, the carousel PDF, the slide PNGs and a PowerPoint file if one was rendered.
                   {saveTo.trim() === exportTo && exportTo ? " (the standard folder)" : ""} Saving again replaces only what an earlier save of this piece wrote.

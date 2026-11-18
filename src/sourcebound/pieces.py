@@ -500,7 +500,7 @@ def export_root(project: config.Project | None = None, to: str | Path | None = N
 
 def export(piece_id: str, project: config.Project | None = None, *, to: str | Path | None = None) -> dict:
     """Save a piece to the folder where it is kept (for a LinkedIn desk e.g.
-    U:/Marketing/LinkedIn/20261120_slug): the post text as post.txt, and of the newest render of every
+    D:/Shared/LinkedIn/20261120_slug): the post text as post.txt, and of the newest render of every
     template the images (PNG), the carousel or document (PDF) and a PowerPoint file (PPTX). Where: see `export_root`, in a folder
     named after `export.name` (default "{date}_{slug}"). Nothing is posted; the export is a copy."""
     import json

@@ -1372,8 +1372,8 @@ def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tm
     with pytest.raises(ValueError, match="no export folder"):
         pieces.export("20261118-etf-kosten", p)
     marketing = tmp_path / "Marketing" / "LinkedIn"
-    (marketing / "KnowTheFlow").mkdir(parents=True)
-    (marketing / "KnowTheFlow" / "KtF.PNG").write_bytes(b"x")
+    (marketing / "Newsletter").mkdir(parents=True)
+    (marketing / "Newsletter" / "old.png").write_bytes(b"x")
     # the machine's standard folder ([pieces] export_dir of the user configuration)
     (tmp_path / "cfg" / "sourcebound").mkdir(parents=True)
     (tmp_path / "cfg" / "sourcebound" / "config.toml").write_text(f'[pieces]\nexport_dir = "{marketing.as_posix()}"\n', encoding="utf-8")
@@ -1407,7 +1407,7 @@ def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tm
     (out / "my notes.txt").write_text("kept", encoding="utf-8")       # the person's own file in the export
     main(["piece", "export", "20261118-etf-kosten"])                  # again: replaces only what it wrote
     assert "exported to" in capsys.readouterr().out and (out / "my notes.txt").exists()
-    assert (marketing / "KnowTheFlow" / "KtF.PNG").exists()
+    assert (marketing / "Newsletter" / "old.png").exists()
     (marketing / "20261120_other").mkdir()
     (marketing / "20261120_other" / "a.pdf").write_bytes(b"x")
     with pytest.raises(ValueError, match="was not written by an export"):
