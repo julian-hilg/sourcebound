@@ -17,6 +17,7 @@ and a function `register(api)` that says what it brings:
         api.check("docx", check)                         # optional: checks before rendering
         api.pack(Path(__file__).parent / "pack")         # optional: designs/ and templates/ it brings
         api.converter(".docx", ".pdf", to_pdf)           # optional: a format conversion for `sb deliver`
+        api.chart_renderer("firm", draw)                 # optional: charts in an organisation's style (see charts.py)
 
 A renderer turns one `Document` (see `render.py`) into files, using a registered template
 and a design.  Plugins never reach around the core: they read a project through
@@ -51,6 +52,15 @@ class Converter:
 
 
 @dataclass
+class ChartRenderer:
+    name: str                       # what a design names in `charts: {renderer: NAME}`
+    fn: Callable                    # render(block, *, design, width_px, height_px, out, lang, text_px, scale) -> Path
+    types: tuple = ()               # block types it draws (empty: the same as the built-in renderer)
+    title: str = ""
+    plugin: str = ""
+
+
+@dataclass
 class Plugin:
     name: str
     version: str = ""
@@ -60,6 +70,7 @@ class Plugin:
     commands: list[str] = field(default_factory=list)
     packs: list[str] = field(default_factory=list)
     converters: list[str] = field(default_factory=list)
+    chart_renderers: list[str] = field(default_factory=list)
 
 
 class Api:
@@ -104,6 +115,15 @@ class Api:
         self._registry.converters[key] = Converter(key[0], key[1], fn, title, self._plugin.name)
         self._plugin.converters.append(f"{key[0]} -> {key[1]}")
 
+    def chart_renderer(self, name: str, fn: Callable, *, types: tuple = (), title: str = "") -> None:
+        """`fn(block, *, design, width_px, height_px, out, lang, text_px=None, scale=2.0) -> Path`: draws one
+        chart block of a deck as an image, in an organisation's chart style.
+
+        A design selects it by name (`charts: {renderer: NAME}` in design.yaml); `sourcebound.charts`
+        falls back to its own renderer, with a note, when no installed plugin has that name."""
+        self._registry.chart_renderers[name] = ChartRenderer(name, fn, tuple(types), title, self._plugin.name)
+        self._plugin.chart_renderers.append(name)
+
 
 @dataclass
 class Registry:
@@ -114,6 +134,7 @@ class Registry:
     scaffolds: dict[str, Callable] = field(default_factory=dict)
     packs: list = field(default_factory=list)
     converters: dict[tuple, Converter] = field(default_factory=dict)
+    chart_renderers: dict[str, ChartRenderer] = field(default_factory=dict)
 
 
 _REGISTRY: Registry | None = None
@@ -141,5 +162,6 @@ def load(*, fresh: bool = False) -> Registry:
 
 def listing() -> list[dict]:
     return [{"name": p.name, "package": p.package, "version": p.version, "error": p.error,
-             "renderers": p.renderers, "commands": p.commands, "packs": p.packs, "converters": p.converters}
+             "renderers": p.renderers, "commands": p.commands, "packs": p.packs, "converters": p.converters,
+             "chart_renderers": p.chart_renderers}
             for p in load().plugins]
