@@ -2063,3 +2063,12 @@ def test_a_new_source_gets_the_date_its_file_declares(desk, tmp_path, capsys):
     main(["source", "set", by_title["A page"]["id"], "--date", "2026-11-01"])
     main(["source", "dates"])
     assert "every source has a date" in capsys.readouterr().out
+
+
+def test_the_web_view_says_which_build_it_serves(tmp_path, monkeypatch):
+    from sourcebound import ui
+    (tmp_path / "index.html").write_text('<script type="module" crossorigin src="/assets/index-AbC123.js"></script>', encoding="utf-8")
+    monkeypatch.setattr(ui, "dist_dir", lambda: tmp_path)
+    assert ui._build_id() == "index-AbC123.js"                      # an open page compares it with its own and offers a reload
+    (tmp_path / "index.html").unlink()
+    assert ui._build_id() is None

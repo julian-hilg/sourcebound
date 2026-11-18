@@ -580,7 +580,18 @@ def health() -> dict:
     h = config.hub()
     return {"name": "sourcebound-ui", "version": __version__, "config": str(h.config_file), "data_root": str(h.lake_root),
             "projects_dir": str(h.projects_dir) if h.projects_dir else None, "activity_log": str(activity.log_path()),
-            "frontend_built": (dist_dir() or Path()).joinpath("index.html").exists()}
+            "frontend_built": (dist_dir() or Path()).joinpath("index.html").exists(), "build": _build_id()}
+
+
+def _build_id() -> str | None:
+    """The built web view's main script (its name changes with every build): an open page compares it with
+    its own and offers a reload after `sb update` or a rebuild."""
+    index = (dist_dir() or Path()).joinpath("index.html")
+    try:
+        m = re.search(r'src="/assets/(index-[^"]+\.js)"', index.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return m.group(1) if m else None
 
 
 # ------------------------------------------------------------------ HTTP

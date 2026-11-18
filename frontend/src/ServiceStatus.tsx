@@ -10,10 +10,32 @@ export function ServiceStatus() {
   return (
     <>
       <FollowFocus />
+      <NewBuild />
       <button className={`wb-status-button${online === false ? " wb-status-warn" : ""}`} title="The local Sourcebound service that reads the project files. Click to reload." onClick={() => void wb.run("data.refresh")}>
         {online === false ? "data: not reachable (start sb ui)" : online ? "data: live" : "data: connecting"}
       </button>
     </>
+  );
+}
+
+/** The main script this page was loaded with ("index-….js"); none while developing (the dev server). */
+const LOADED = (() => {
+  const src = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.src ?? "";
+  return src.split("/").pop() || null;
+})();
+
+/**
+ * After `sb update` or a rebuild the service serves a new build, but an open page keeps running the old
+ * one until it reloads. This says so in the status bar, with the reload one click away.
+ */
+function NewBuild() {
+  const entry = useApi<{ build?: string | null }>(LOADED ? paths.health : null, 30_000);
+  const served = entry.data?.build;
+  if (!LOADED || !served || served === LOADED) return null;
+  return (
+    <button className="wb-status-button wb-status-warn" title={`This page runs ${LOADED}; the service now serves ${served}. Your layout and settings are kept.`} onClick={() => location.reload()}>
+      new version: reload
+    </button>
   );
 }
 

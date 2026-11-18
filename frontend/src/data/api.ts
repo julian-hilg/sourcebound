@@ -177,6 +177,7 @@ export const paths = {
   fetch: "/api/fetch",
   activity: "/api/activity",
   focus: "/api/focus",
+  health: "/api/health",
   workspace: "/api/workspace",
   system: "/api/system",
   lake: "/api/lake",
