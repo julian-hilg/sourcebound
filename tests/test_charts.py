@@ -105,3 +105,14 @@ def test_font_files_of_the_design_are_found_by_name(tmp_path):
     assert charts.font_file("DejaVu Sans", weight=700, design=design) == tmp_path / "fonts" / "House-Bold.ttf"
     assert charts.font_file("DejaVuSans-Bold", design=design) == tmp_path / "fonts" / "House-Bold.ttf"   # the PostScript name
     assert charts.font_file("No Such Face 123", design=design) is None
+
+
+def test_a_design_whose_fonts_are_not_installed_falls_back_to_sans_serif(tmp_path):
+    from sourcebound import assets, charts
+    design = assets.design()
+    design = {**design, "fonts": {**design["fonts"], "body": ["No Such Face", "sans-serif"], "heading": ["No Such Face"], "files": []}}
+    regular, strong = charts._font_props(design)
+    assert regular.get_family() == ["sans-serif"] and strong.get_weight() in ("bold", 700)
+    out = charts.render({"type": "bars", "rows": [{"label": "A", "value": 1}]}, design=design, width_px=400, height_px=200,
+                        out=tmp_path / "c.png", lang="en")
+    assert out.stat().st_size > 1000
