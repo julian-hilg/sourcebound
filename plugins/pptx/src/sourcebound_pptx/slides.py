@@ -132,11 +132,13 @@ class Ctx:
         self.lang = "de" if self.german else "en"
         self.panel = bool(template.get("panel", False))
         self.panel_color = charts._hex((design.get("charts") or {}).get("panel") or design["colors"]["surface"])
+        # Exhibits are numbered ("Abb. 1 – ...") only where the template asks for it (`numbering:`); a post
+        # is not a report. The prefixes come from there, else from the design's captions.
         num = template.get("numbering") or {}
         cap = (design.get("charts") or {}).get("caption") or {}
         tcap = (design.get("charts") or {}).get("table_caption") or {}
-        self.fig_prefix = (num.get("figure") or cap.get("prefix") or {}).get(self.lang) if (num or cap) else None
-        self.tab_prefix = (num.get("table") or tcap.get("prefix") or {}).get(self.lang) if (num or tcap) else None
+        self.fig_prefix = (num.get("figure") or cap.get("prefix") or {}).get(self.lang) if num else None
+        self.tab_prefix = (num.get("table") or tcap.get("prefix") or {}).get(self.lang) if num else None
         self.num_sep = num.get("separator") or cap.get("separator") or " – "
         self.source_prefix = ((design.get("text") or {}).get("source_prefix") or {}).get(self.lang, "Source: ")
         self.chart_px = float(self.styles.get("chart", {}).get("size") or 22)

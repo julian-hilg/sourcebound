@@ -164,3 +164,14 @@ def test_measure_breaks_lines_at_spaces_only(desk):
     assert meas.lines("1.800 € and more", st, meas.width("1.800 €", st) + 1) == ["1.800 €", "and", "more"]
     assert meas.height("a b", st, 10_000) == 30.0
     assert meas.width("ab", {**st, "caps": True}) > meas.width("ab", st)
+
+
+def test_exhibits_are_numbered_only_where_the_template_asks(desk):
+    from sourcebound_pptx.slides import Ctx
+    design = assets.design()
+    design = {**design, "charts": {**(design.get("charts") or {}), "caption": {"prefix": {"de": "Abb. ", "en": "Figure "}}}}
+    deck = {"lang": "de"}
+    plain = Ctx(None, {"kind": "pptx"}, design, deck)
+    assert plain.fig_prefix is None and plain.tab_prefix is None          # a post: the design's Word captions do not number it
+    numbered = Ctx(None, {"kind": "pptx", "numbering": {"figure": {"de": "Abb. "}, "table": {"de": "Tabelle "}}}, design, deck)
+    assert (numbered.fig_prefix, numbered.tab_prefix) == ("Abb. ", "Tabelle ")

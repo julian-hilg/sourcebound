@@ -155,6 +155,7 @@ def build_html(doc, template: dict, design: dict) -> tuple[str, dict, list[str]]
         layout_js=Markup(_file(template, "layout", "layout.js")),
         config_json=Markup(json.dumps(config).replace("</", "<\\/")), source_prefix=prefix,
         logo=Markup(logo), logo_inverse=Markup(inverse or logo), logo_needs_invert=bool(logo and not inverse),
+        numbering=template.get("numbering") or None,    # "Abb. 1 – ..." only where template.yaml asks for it
         design_name="" if d.get("logo") is False else design.get("name", ""))
     return html, prepared, missing
 

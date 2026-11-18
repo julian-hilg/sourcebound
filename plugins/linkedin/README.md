@@ -33,6 +33,10 @@ The same text is what `sb template guide ID` prints and what agents in the web v
 
 ## Design and template
 
+Exhibit captions are not numbered: a post is not a report. A template that wants "Figure 1 – …"
+sets `numbering: {figure: {de: "Abb. ", en: "Figure "}, table: {…}, separator: " – "}` in its
+`template.yaml`; the page gets it as `numbering` (and the pptx plugin reads the same key).
+
 The template holds layout only. Every colour and font in its CSS is a variable the renderer
 writes from the design (`sb design show ID`): `--c-primary`, `--c-accent`, `--c-ink`,
 `--c-ink-soft`, `--c-ink-faint`, `--c-neutral`, `--c-surface`, `--c-paper`, hairlines derived
