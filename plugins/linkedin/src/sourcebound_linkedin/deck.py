@@ -19,7 +19,8 @@ from sourcebound import render
 RESULT = re.compile(r"\{\{result:([^}]+)\}\}")
 CITE_GROUP = re.compile(r"\[([^\[\]]*@[A-Za-z][^\[\]]*)\]")
 CITE_KEY = re.compile(r"@([A-Za-z][\w:.-]*\w)")
-NUMERIC = {"value", "max", "min", "pos", "start", "width", "span", "ext", "height", "label_width", "gutter", "y"}
+# Fields whose `{{result:key}}` becomes the recorded number (not its text); "values" covers each point of a line.
+NUMERIC = {"value", "values", "max", "min", "pos", "start", "width", "span", "ext", "height", "label_width", "gutter", "y"}
 
 # type -> (required fields, the field that holds a list of dicts and what each needs)
 BLOCKS: dict[str, tuple[tuple, str | None, tuple]] = {
