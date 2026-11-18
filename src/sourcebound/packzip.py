@@ -6,7 +6,8 @@
 A pack is data: designs, templates and playbooks for agents. A zip may hold only that:
 
 * `designs/<id>/...`, `templates/<id>/...` and `skills/<id>/...` (a playbook for Claude Code:
-  `SKILL.md` and other text); at the top also `pack.yaml`, `README*`, `LICENSE*`.
+  `SKILL.md` and other text), `docs/<id>.md` (pages the web view's Documentation shows); at the
+  top also `pack.yaml`, `README*`, `LICENSE*`.
   One folder around everything is allowed (a zipped pack folder).
 * no absolute paths, no `..`, no links; ids are lowercase letters, digits, `-` and `_`
 * only data file types (EXTENSIONS): no programs, no Python. The one script a template may carry is
@@ -68,6 +69,7 @@ def check(path: str | Path) -> dict:
             problems.append(f"{total / 1e6:.0f} MB unpacked (at most {MAX_TOTAL / 1e6:.0f} MB)")
         ids: dict[str, set[str]] = {"designs": set(), "templates": set(), "skills": set()}
         has: set[str] = set()
+        docs: set[str] = set()
         manifest = {}
         for i in infos:
             name = i.filename.replace("\\", "/")
@@ -92,9 +94,15 @@ def check(path: str | Path) -> dict:
                         except (yaml.YAMLError, UnicodeDecodeError) as e:
                             problems.append(f"{rel}: not readable ({e})")
                     continue
-                problems.append(f"{rel}: only designs/, templates/, skills/, pack.yaml, README and LICENSE may be at the top")
+                problems.append(f"{rel}: only designs/, templates/, skills/, docs/, pack.yaml, README and LICENSE may be at the top")
                 continue
             kind = p.parts[0]
+            if kind == "docs":                         # one level: docs/<id>.md, Markdown only
+                if len(p.parts) != 2 or p.suffix.lower() != ".md" or not ID.match(p.stem):
+                    problems.append(f"{rel}: docs/ holds pages as docs/<id>.md (lowercase id)")
+                else:
+                    docs.add(p.stem)
+                continue
             if kind not in ids or len(p.parts) < 3:
                 problems.append(f"{rel}: not inside designs/<id>/, templates/<id>/ or skills/<id>/")
                 continue
@@ -114,11 +122,11 @@ def check(path: str | Path) -> dict:
             for ident in sorted(ids[kind]):
                 if f"{kind}/{ident}/{need}" not in has:
                     problems.append(f"{kind}/{ident}: no {need}")
-        if not any(ids.values()):
+        if not any(ids.values()) and not docs:
             problems.append("neither designs/<id>/, templates/<id>/ nor skills/<id>/ in the zip")
     if problems:
         raise ValueError(f"pack {z.name} refused, nothing was installed:\n  " + "\n  ".join(sorted(set(problems))))
-    return {"file": str(z), "prefix": prefix, "designs": sorted(ids["designs"]), "templates": sorted(ids["templates"]), "skills": sorted(ids["skills"]),
+    return {"file": str(z), "prefix": prefix, "designs": sorted(ids["designs"]), "templates": sorted(ids["templates"]), "skills": sorted(ids["skills"]), "docs": sorted(docs),
             "files": len(infos), "bytes": total, "name": str(manifest.get("name") or z.stem),
             "version": str(manifest.get("version") or ""), "description": str(manifest.get("description") or "")}
 

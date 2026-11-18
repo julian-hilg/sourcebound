@@ -7,6 +7,7 @@ import { deliverableHub, evidenceHub, piecesHub, projectHub, sourcesHub, systemH
 import { lakeTool } from "./tools/lake";
 import { projectsTool } from "./tools/projects";
 import { sqlTool } from "./tools/sql";
+import { documentationTool } from "./tools/documentation";
 
 /**
  * The Sourcebound frontend: a view over the files of research projects. It has no data of its
@@ -154,6 +155,7 @@ Related views are tabs of one panel, so a workspace needs few panels.
 | SQL console | one read-only statement against the lake or a registered database | \`sb sql\` |
 | Sources | *Connections*: data sources and what each needs, MCP servers. *Jobs*: pipelines on a schedule and their runs. *Fetch log*: every request of the fetcher and the hosts it stopped | the registry, \`<data root>/jobs/\`, \`<data root>/raw/*/manifest.jsonl\` |
 | System | *Overview*: what is installed and configured, and the command for what is missing. *Assets*: designs, templates, plugins and their formats | \`sb doctor --json\`, the registry |
+| Documentation | example prompts for an agent (start a study or a desk, make a post from a file, change a slide), the commands, and pages an installed pack adds | Sourcebound, the registry's \`docs/\` |
 
 Panels in one link group follow each other: a project selected in *Projects*, a piece selected in *Pieces*, a number clicked in the *Deliverable*, a table selected in the *Lake*. A tab follows the selection like a panel does.
 
@@ -200,7 +202,7 @@ export const werkbank = new Werkbank({
   themes: ["sourcebound", "sourcebound-dark", "light", "dark", "xp"],
   version: "0.1.0",
   docs: [{ id: "sourcebound", title: "Using Sourcebound", text: ABOUT }],
-  tools: [projectsTool, projectHub, evidenceHub, deliverableHub, piecesHub, lakeTool, sqlTool, sourcesHub, systemHub, chatTool],
+  tools: [projectsTool, projectHub, evidenceHub, deliverableHub, piecesHub, lakeTool, sqlTool, sourcesHub, systemHub, chatTool, documentationTool],
   // What linked panels share. Each is an id from the project files; null means "none chosen".
   topics: {
     project: z.string().nullable(),

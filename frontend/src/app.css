@@ -826,3 +826,80 @@ input.sb-grow {
   border-radius: var(--wb-radius);
   background: var(--wb-canvas-alt);
 }
+
+/* ---- Documentation: pages beside their list; prompts with a copy button ------------------------ */
+.sb-docs {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.sb-docs-nav {
+  flex: none;
+  width: 170px;
+  padding: 10px 6px;
+  border-right: 1px solid var(--wb-grid);
+  overflow: auto;
+}
+.sb-docs-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sb-docs-nav .wb-list-item {
+  width: 100%;
+  text-align: left;
+}
+.sb-docs-nav [aria-current] {
+  font-weight: 600;
+  color: var(--wb-accent);
+}
+.sb-docs-group {
+  margin: 14px 6px 4px;
+  color: var(--wb-text-dim);
+  font-size: 0.9em;
+}
+.sb-docs-page {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 22px 30px;
+  line-height: 1.55;
+}
+.sb-docs-page table {
+  border-collapse: collapse;
+  margin: 8px 0 16px;
+}
+.sb-docs-page th,
+.sb-docs-page td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--wb-grid);
+  text-align: left;
+  vertical-align: top;
+}
+.sb-docs-page code {
+  font-family: var(--wb-mono);
+  font-size: 0.92em;
+}
+.sb-prompt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--wb-accent);
+  border-radius: var(--wb-radius);
+  background: var(--wb-canvas-alt);
+}
+.sb-prompt p {
+  flex: 1;
+  margin: 0;
+  white-space: pre-wrap;
+}
+.sb-docs-page h1 {
+  margin: 8px 0 12px;
+  font-size: 1.4em;
+  line-height: 1.25;
+}
+.sb-docs-page h2 {
+  margin: 22px 0 6px;
+  font-size: 1.12em;
+}

@@ -2100,3 +2100,28 @@ def test_a_project_draws_its_own_figures_from_results_and_sources(desk, capsys):
     assert figures.check_figure(p, "zulage") == ["result z.gone is used but not recorded"]
     with pytest.raises(SystemExit, match="exists"):
         main(["figure", "new", "zulage"])
+
+
+def test_the_documentation_shows_sourcebounds_pages_and_those_of_packs(hub, tmp_path, capsys):
+    import zipfile
+    from sourcebound import assets, packzip
+    from sourcebound.cli import main
+    pages = assets.doc_pages()
+    assert [p["id"] for p in pages[:2]] == ["prompts", "commands"] and all(p["origin"] == "sourcebound" for p in pages[:2])
+    assert "```prompt" in pages[0]["text"] and not pages[0]["text"].startswith("---")      # front matter is read, not shown
+    pack = tmp_path / "firm-pack"
+    (pack / "docs").mkdir(parents=True)
+    (pack / "docs" / "firm-posts.md").write_text("---\ntitle: Firm posts\n---\n\n# Firm posts\n\n```prompt\nMake a firm post.\n```\n", encoding="utf-8")
+    main(["pack", "install", str(pack)])
+    assert "pages for the web view's Documentation: firm-posts" in capsys.readouterr().out
+    page = next(p for p in assets.doc_pages() if p["id"] == "pack-firm-posts")
+    assert page["origin"] == "pack" and page["title"] == "Firm posts"
+    z = assets.export_pack(tmp_path / "firm.zip", designs_=[], templates_=[], docs_=["firm-posts"])
+    assert packzip.check(z)["docs"] == ["firm-posts"]
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("pack.yaml", "name: firm\n")
+        zf.writestr("docs/sub/page.md", "x")
+        zf.writestr("docs/run.py", "print(1)")
+    with pytest.raises(ValueError, match="docs/<id>.md"):
+        packzip.check(bad)

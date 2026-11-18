@@ -256,6 +256,11 @@ private plugin: `register(api)` calls `api.pack(folder)`, and its designs and te
 found on every machine where the package is installed, with no `sb pack install`. The registry
 of a machine still wins over a plugin's pack, so one machine can try a change first.
 
+A pack may bring pages for the web view's *Documentation* (`docs/<id>.md`, Markdown with an
+optional front matter `title:` and `order:`; a code block marked `prompt` gets a copy button):
+the organisation's own example prompts beside Sourcebound's *Prompts* and *Commands*.
+`sb pack export … --doc ID` puts one in a pack zip.
+
 A pack may also bring playbooks for Claude Code: `skills/<id>/SKILL.md` (text only, no
 programs). `sb pack install` copies them into the registry and into `~/.claude/skills`, so an
 agent knows the organisation's rules for its formats (which template for which post, what is

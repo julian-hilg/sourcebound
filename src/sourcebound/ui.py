@@ -11,6 +11,7 @@
     POST /api/projects/<id>/render           {deliverable, template, design?}            -> what `sb render deliverables/..` does
     GET  /api/fetch                          fetch log and stopped hosts per source
     GET  /api/activity                       what the agents are doing (hook events)
+    GET  /api/docs                           the Documentation pages: Sourcebound's own and those of packs
     GET  /api/focus                          the piece to show (`sb piece open`, the last render of a piece)
     GET  /api/workspace                      a VS Code workspace of all projects;  POST writes it (`sb workspace`)
     GET  /api/system                         what is installed and configured (`sb doctor --json`)
@@ -691,6 +692,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(fetch_log())
                 case ("GET", "activity"):
                     self._json({"log": str(activity.log_path()), "events": activity.tail(int(q.get("limit", 300)))})
+                case ("GET", "docs"):
+                    from . import assets
+                    self._json({"pages": assets.doc_pages()})
                 case ("GET", "focus"):
                     from . import pieces
                     self._json({"focus": pieces.current_focus()})

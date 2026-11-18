@@ -374,6 +374,8 @@ def cmd_pack(a):
                 print(f"pack {p['name']}" + (f" {p['version']}" if p["version"] else "") + f": {p['files']} files checked")
                 print(f"from {p['source']} (sha256 {p['sha256'][:12]})")
             print(f"installed designs: {', '.join(done['designs']) or 'none'}; templates: {', '.join(done['templates']) or 'none'}")
+            if done.get("docs"):
+                print(f"pages for the web view's Documentation: {', '.join(done['docs'])}")
             if done.get("skills"):                  # playbooks for Claude Code: where Claude Code finds them
                 from .cli import _place
                 from . import config
@@ -395,7 +397,7 @@ def cmd_pack(a):
             if done.get("unchanged"):
                 print("replaced, the same as installed: " + ", ".join(done["unchanged"]))
         else:
-            print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or [], skills_=a.skill or []))
+            print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or [], skills_=a.skill or [], docs_=a.doc or []))
     except (ValueError, OSError) as e:
         _fail(e)
 
@@ -537,7 +539,8 @@ def add_parsers(sub) -> None:
     s.set_defaults(f=cmd_template)
     s = sub.add_parser("pack"); s.add_argument("what", choices=["install", "export"]); s.add_argument("folder")
     s.add_argument("--design", action="append"); s.add_argument("--template", action="append")
-    s.add_argument("--skill", action="append", help="export: a playbook for agents installed from a pack"); s.set_defaults(f=cmd_pack)
+    s.add_argument("--skill", action="append", help="export: a playbook for agents installed from a pack")
+    s.add_argument("--doc", action="append", help="export: a Documentation page installed from a pack"); s.set_defaults(f=cmd_pack)
     s = sub.add_parser("plugin", help="installed plugins; add/remove a plugin folder (a private plugin kept outside the environment)")
     s.add_argument("what", choices=["list", "add", "remove"], nargs="?", default="list"); s.add_argument("folder", nargs="?")
     s.set_defaults(f=cmd_plugin)

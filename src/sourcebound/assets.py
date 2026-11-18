@@ -274,7 +274,7 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
     src = Path(folder).expanduser().resolve()
     reg = config.hub().registry
     records = pack_records()
-    out: dict = {"designs": [], "templates": [], "skills": [], "replaced": [], "changed": [], "unchanged": []}
+    out: dict = {"designs": [], "templates": [], "skills": [], "docs": [], "replaced": [], "changed": [], "unchanged": []}
     marker = {"designs": "design.yaml", "templates": "template.yaml", "skills": "SKILL.md"}
     for kind in ("designs", "templates", "skills"):
         for d in sorted((src / kind).glob("*")):
@@ -292,7 +292,11 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(d, dest, ignore=shutil.ignore_patterns(*PACK_IGNORE))
                 out[kind].append(d.name)
-    if not out["designs"] and not out["templates"] and not out["skills"]:
+    for page in sorted((src / "docs").glob("*.md")) if (src / "docs").is_dir() else []:   # pages for the web view
+        (reg / "docs").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(page, reg / "docs" / page.name)
+        out["docs"].append(page.stem)
+    if not out["designs"] and not out["templates"] and not out["skills"] and not out["docs"]:
         raise FileNotFoundError(f"{src} holds neither designs/<id>/design.yaml, templates/<id>/template.yaml nor skills/<id>/SKILL.md")
     if provenance is None:                       # a folder: its own pack.yaml, else the folder's name
         manifest = {}
@@ -304,21 +308,21 @@ def install_pack(folder: str | Path, *, provenance: dict | None = None) -> dict:
     out["pack"] = {**provenance, "files": sum(1 for f in src.rglob("*") if f.is_file() and not _ignored(f.relative_to(src)))}
     # the same pack installed before: did its content change? (content, so that a zip and the
     # folder it was made from count as the same pack)
-    content = tree_sha256(src, only=("designs", "templates", "skills"))
+    content = tree_sha256(src, only=("designs", "templates", "skills", "docs"))
     out["previous"] = next((r for r in records if r.get("name") == provenance["name"]), None)
     out["source_differs"] = bool(out["previous"] and out["previous"].get("content_sha256")
                                  and out["previous"]["content_sha256"] != content)
     from datetime import datetime, timezone
     record = {**provenance, "content_sha256": content,
               "installed": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "designs": out["designs"], "templates": out["templates"], "skills": out["skills"]}
+              "designs": out["designs"], "templates": out["templates"], "skills": out["skills"], "docs": out["docs"]}
     (reg / "packs").mkdir(parents=True, exist_ok=True)
     config.write_atomic(reg / "packs" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', record['name'])}.yaml",
                         yaml.safe_dump(record, sort_keys=False, allow_unicode=True))
     return out
 
 
-def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str], skills_: list[str] = ()) -> Path:
+def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str], skills_: list[str] = (), docs_: list[str] = ()) -> Path:
     """Write the named designs, templates and skills (installed from packs) as a pack folder, or as a
     .zip (to carry to another machine)."""
     if str(folder).lower().endswith(".zip"):
@@ -326,9 +330,15 @@ def export_pack(folder: str | Path, *, designs_: list[str], templates_: list[str
 
         from . import packzip
         with tempfile.TemporaryDirectory(prefix="sb-pack-") as tmp:
-            export_pack(tmp, designs_=designs_, templates_=templates_, skills_=skills_)
+            export_pack(tmp, designs_=designs_, templates_=templates_, skills_=skills_, docs_=docs_)
             return packzip.export(folder, Path(tmp))
     dest = Path(folder).expanduser().resolve()
+    for ident in docs_:                              # pages installed from a pack (<registry>/docs/<id>.md)
+        page = config.hub().registry / "docs" / f"{ident}.md"
+        if not page.is_file():
+            raise FileNotFoundError(f"no page {ident} (installed pages: <registry>/docs/)")
+        (dest / "docs").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(page, dest / "docs" / page.name)
     skills = {d.name: d for d in pack_skills()}
     for kind, ids in (("designs", designs_), ("templates", templates_), ("skills", skills_)):
         for ident in ids:
@@ -344,3 +354,28 @@ def pack_skills() -> list[Path]:
     """Playbooks for agents that installed packs brought (<registry>/skills/<id>/SKILL.md)."""
     folder = config.hub().registry / "skills"
     return sorted(d for d in folder.glob("*") if (d / "SKILL.md").is_file()) if folder.is_dir() else []
+
+
+def doc_pages() -> list[dict]:
+    """Pages for the web view's Documentation: Sourcebound's own (appdocs/), then those installed packs
+    brought (<registry>/docs/<id>.md). Each: id, title, origin, order, text (front matter: title, order)."""
+    import re as _re
+    out = []
+    folders = [(Path(__file__).parent / "appdocs", "sourcebound")]
+    try:
+        folders.append((config.hub().registry / "docs", "pack"))
+    except Exception:
+        pass
+    for folder, origin in folders:
+        for f in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+            text = f.read_text(encoding="utf-8")
+            meta: dict = {}
+            m = _re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", text, _re.S)
+            if m:
+                meta = yaml.safe_load(m.group(1)) or {}
+                text = text[m.end():]
+            head = _re.search(r"^# (.+)$", text, _re.M)
+            out.append({"id": f.stem if origin == "sourcebound" else f"pack-{f.stem}", "origin": origin,
+                        "title": str(meta.get("title") or (head.group(1) if head else f.stem)),
+                        "order": int(meta.get("order") or 100), "text": text.strip() + "\n"})
+    return sorted(out, key=lambda p: (p["origin"] != "sourcebound", p["order"], p["title"]))
