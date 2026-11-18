@@ -15,8 +15,8 @@
     "repo": "julian-hilg/werkbank"
   },
   "dependencies": {
-    "@werkbank/framework": "https://github.com/julian-hilg/werkbank/releases/download/v0.6.1/werkbank-framework-0.6.1.tgz",
-    "@werkbank/bridge": "https://github.com/julian-hilg/werkbank/releases/download/v0.6.1/werkbank-bridge-0.6.1.tgz",
+    "@werkbank/framework": "https://github.com/julian-hilg/werkbank/releases/download/v0.6.2/werkbank-framework-0.6.2.tgz",
+    "@werkbank/bridge": "https://github.com/julian-hilg/werkbank/releases/download/v0.6.2/werkbank-bridge-0.6.2.tgz",
     "katex": "^0.16.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
