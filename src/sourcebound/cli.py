@@ -821,11 +821,40 @@ def cmd_source(a):
     _show_text(text, a, a.id)
 
 
+def _figure_project(a):
+    """A project's own figures (figures/<name>.yaml): new, render, list."""
+    from . import config, figures
+    p = config.project()
+    try:
+        if a.what == "new":
+            f = figures.new_figure(p, a.name, a.type, title=a.title or "")
+            print(f"wrote {f.relative_to(p.root).as_posix()}: fill in chart, title and source, then sb figure render {a.name}")
+        elif a.what == "render":
+            names = a.names or [f.stem for f in figures.figure_files(p)]
+            if not names:
+                sys.exit("no figure yet: sb figure new NAME --type bars")
+            for name in names:
+                m = figures.render_figure(p, name, design_id=a.design, fmt="svg" if a.svg else "png")
+                print(f"drew figures/{m['file']} ({m['size']['width']} x {m['size']['height']} px, design {m['design']})"
+                      + (f"; results {', '.join(f'{k}={v}' for k, v in m['results'].items())}" if m["results"] else ""))
+                for n in m["notes"]:
+                    print(f"note: {n}")
+        else:
+            rows = figures.figure_list(p)
+            for r in rows:
+                print(f"{r['figure']:<28} {r['state']:<20} {r.get('title', '')}" + (f"  (older values of {', '.join(r['stale'])})" if r["stale"] else ""))
+            print(f"{len(rows)} figures")
+    except figures.FigureError as e:
+        sys.exit(str(e))
+
+
 def cmd_figure(a):
     """Figures for pieces. `sb figure crop W-0007 --page 4 --box 52,8,98,45 --out pieces/ID/figures/x.png`
     cuts a chart out of a registered PDF; `--grid` writes the page with a 10 % grid to read the box off."""
     from . import figures, ledger
     from .fetch import read_raw
+    if a.what in ("new", "render", "list"):
+        return _figure_project(a)
     if a.what != "crop":
         sys.exit(f"sb figure {a.what}: unknown (sb figure crop W-xxxx --page N --box l,t,r,b --out FILE)")
     src = {s["id"]: s for s in ledger.load()["sources"]}.get(a.id)
@@ -1254,7 +1283,7 @@ def main(argv=None):
     s.add_argument("args", nargs=argparse.REMAINDER, help="with run: SCRIPT (skill:<id>/scripts/x.py, or a path in the checkout) and its arguments")
     s.add_argument("--cwd", help="with run: the folder to run in (default: the checkout)")
     s.set_defaults(f=lambda a: __import__("sourcebound.toolkits", fromlist=["cmd"]).cmd(a))
-    s = sub.add_parser("figure", help="figures for pieces: `sb figure crop W-xxxx --page N --box l,t,r,b --out FILE` cuts one out of a PDF")
+    s = sub.add_parser("figure", help="figures: `new|render|list` a project's own charts (figures/NAME.yaml); `crop` cuts one out of a PDF")
     fsub = s.add_subparsers(dest="what", required=True)
     c = fsub.add_parser("crop", help="cut a region of a registered PDF's page into a PNG (the archived copy is read)")
     c.add_argument("id", help="W-xxxx of a registered PDF"); c.add_argument("--page", type=int, required=True)
@@ -1263,6 +1292,13 @@ def main(argv=None):
     c.add_argument("--no-trim", action="store_true", help="keep the white page margin inside the box")
     c.add_argument("--dpi", type=int, default=300); c.add_argument("--out", help="the PNG to write (e.g. pieces/ID/figures/name.png)")
     c.set_defaults(f=cmd_figure)
+    c = fsub.add_parser("new", help="a figure of this project: figures/NAME.yaml with an example chart block to fill in")
+    c.add_argument("name"); c.add_argument("--type", default="bars", help="bars, columns, line, timeline, gantt or windows")
+    c.add_argument("--title"); c.set_defaults(f=cmd_figure)
+    c = fsub.add_parser("render", help="draw figures (all without names) in the design's chart style: figures/NAME.png")
+    c.add_argument("names", nargs="*"); c.add_argument("--design", help="a design id; default: the file's, else the project's")
+    c.add_argument("--svg", action="store_true", help="write SVG instead of PNG"); c.set_defaults(f=cmd_figure)
+    c = fsub.add_parser("list", help="the project's figures and whether they show current numbers"); c.set_defaults(f=cmd_figure)
     s = sub.add_parser("papers"); s.add_argument("what", choices=["sync", "convert", "status"])
     s.add_argument("--background", action="store_true", help="convert detached from this session")
     s.add_argument("--retry", action="store_true", help="also retry papers whose conversion failed")

@@ -2072,3 +2072,31 @@ def test_the_web_view_says_which_build_it_serves(tmp_path, monkeypatch):
     assert ui._build_id() == "index-AbC123.js"                      # an open page compares it with its own and offers a reload
     (tmp_path / "index.html").unlink()
     assert ui._build_id() is None
+
+
+def test_a_project_draws_its_own_figures_from_results_and_sources(desk, capsys):
+    import yaml
+    from sourcebound import config, figures, results
+    from sourcebound.cli import main
+    p = config.project()
+    main(["figure", "new", "zulage", "--type", "bars", "--title", "Zulage"])
+    f = desk / "figures" / "zulage.yaml"
+    spec = yaml.safe_load(f.read_text(encoding="utf-8"))
+    assert spec["chart"]["type"] == "bars" and spec["size"] == "report"
+    with pytest.raises(SystemExit, match="typed numbers"):                       # typed numbers need a source
+        main(["figure", "render", "zulage"])
+    (desk / "analysis" / "z.py").write_text("", encoding="utf-8")
+    results.save({"z.max": {"value": 540, "display": "540", "unit": "EUR", "provenance": {"script": "analysis/z.py"}}}, p)
+    spec["chart"] = {"type": "bars", "rows": [{"label": "Grundzulage", "value": "{{result:z.max}}", "hi": True}]}
+    spec["source"] = ""
+    f.write_text(yaml.safe_dump(spec, allow_unicode=True), encoding="utf-8")
+    main(["figure", "render", "zulage"])
+    assert "drew figures/zulage.png" in capsys.readouterr().out and (desk / "figures" / "zulage.png").stat().st_size > 1000
+    assert figures.figure_list(p)[0]["state"] == "drawn"
+    results.save({"z.max": {"value": 600, "display": "600", "unit": "EUR", "provenance": {"script": "analysis/z.py"}}}, p)
+    assert figures.figure_list(p)[0]["state"] == "stale" and figures.figure_list(p)[0]["stale"] == ["z.max"]
+    spec["chart"]["rows"][0]["value"] = "{{result:z.gone}}"
+    f.write_text(yaml.safe_dump(spec, allow_unicode=True), encoding="utf-8")
+    assert figures.check_figure(p, "zulage") == ["result z.gone is used but not recorded"]
+    with pytest.raises(SystemExit, match="exists"):
+        main(["figure", "new", "zulage"])

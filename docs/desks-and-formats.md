@@ -168,6 +168,26 @@ export_dir = "U:/Marketing/LinkedIn"
 files it wrote; exporting again replaces only those. A folder that an export of this piece did
 not write is refused, so an export never deletes anything else. 
 
+### A project's own figures
+
+A chart that a report, a note or a post shows is one file, `figures/<name>.yaml`: a title, the
+source of its numbers, a size, and one block in the vocabulary of a slides deck (bars, columns,
+line, timeline, gantt, windows; `sb template guide` lists the fields). `sb figure render` draws
+it in the design's chart style, so a figure in a report looks like the same chart on a slide;
+with an organisation's design, its chart plugin draws it.
+
+```sh
+sb figure new zulage --type bars --title "Grundzulage"   # figures/zulage.yaml, an example to fill in
+sb figure render zulage                                  # figures/zulage.png (--svg; --design ID)
+sb figure list                                           # drawn, stale (older numbers), not drawn
+```
+
+A value may be `{{result:key}}`: the recorded number is drawn, and `figures/<name>.figure.json`
+keeps which values were drawn, so `sb figure list` shows a figure that shows older numbers. A
+number typed into the block needs `source:` ("[@W-0001]"); the figure is not drawn without one.
+Sizes: `report` (16 cm, 7 pt labels), `slide`, `square`, or `{width, height, text_px}` in px.
+`sb figure crop W-xxxx --page N --box …` cuts a figure out of a registered PDF instead.
+
 ### One piece's own look
 
 A piece may adjust the look of its own render without touching the registered template:
