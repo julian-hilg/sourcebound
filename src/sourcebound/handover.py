@@ -122,6 +122,8 @@ _NO_ARGS = re.compile(r"par|smallskip|medskip|bigskip|noindent|newline|linebreak
 
 def _layout(s: str) -> str:
     """Drop layout commands: {\\small text} -> text, {\\bfseries text} -> **text**, \\vspace{3pt} -> nothing."""
+    # spacing first: in \vspace{3pt}{\small x} the group is not an argument of \vspace
+    s = _commands(s, "vspace|hspace|addvspace|vskip|hskip", lambda n, o, a: "")
     rx = re.compile(r"\{\s*\\(%s|%s)(?![a-zA-Z])\s*" % (_DECLARATIONS, "|".join(_SHAPES)))
     for _ in range(4):                              # nested groups
         pos, out = 0, []
@@ -140,7 +142,6 @@ def _layout(s: str) -> str:
             out.append(s[pos:m.start()] + inner)
             pos = g[1]
         s = "".join(out) + s[pos:]
-    s = _commands(s, "vspace|hspace|addvspace|vskip|hskip", lambda n, o, a: "")
     s = re.sub(r"\\(?:%s|%s)(?![a-zA-Z])\s*" % (_DECLARATIONS, "|".join(_SHAPES)), "", s)
     return re.sub(r"\\(?:smallskip|medskip|bigskip|noindent)(?![a-zA-Z])\s*", "", s)
 
@@ -247,11 +248,36 @@ def _expand(s: str, defs: dict[str, tuple[int, str]]) -> str:
     return s
 
 
-def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tuple[str, list[str]]:
+# Symbols and spaces written as commands (also in the title block: author, date).
+_SYMBOLS = {"textperiodcentered": "\u00b7", "textbullet": "\u2022", "textbar": "|", "slash": "/", "textbackslash": "\\",
+            "textellipsis": "\u2026", "textdegree": "\u00b0", "textasciitilde": "~", "enspace": "\u2002",
+            "enskip": "\u2002", "quad": "\u2003", "qquad": "\u2003\u2003", "thinspace": "\u202f"}
+# Quotation marks by language, (opening, closing), for \enquote, ``...'' and babel's "`..."'.
+QUOTES = {"de": ("\u201e", "\u201c"), "en": ("\u201c", "\u201d")}
+
+
+def language(main_text: str, default: str = "") -> str:
+    """The language a LaTeX deliverable is written in (de, en, ...): from \\DocumentMetadata, the class
+    options or babel/polyglossia; `default` (the project's language) where main.tex says nothing."""
+    pre = strip_comments(main_text.split("\\begin{document}")[0])
+    m = (re.search(r"\\DocumentMetadata\s*\{[^}]*\blang\s*=\s*([a-zA-Z]{2})", pre)
+         or re.search(r"\\documentclass\s*\[[^\]]*\blang\s*=\s*([a-zA-Z]+)", pre)
+         or re.search(r"\\usepackage\s*\[[^\]]*\b(n?german|english|british|american|french|italian|spanish)\b[^\]]*\]\s*\{babel\}", pre)
+         or re.search(r"\\setmainlanguage\s*(?:\[[^\]]*\])?\s*\{([a-zA-Z]+)\}", pre))
+    if not m:
+        return default
+    word = m.group(1).lower()
+    names = {"english": "en", "british": "en", "american": "en", "french": "fr", "italian": "it", "spanish": "es"}
+    return "de" if "german" in word else names.get(word, word[:2])
+
+
+def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None, lang: str = "") -> tuple[str, list[str]]:
     """Markdown for a section written in the LaTeX house style, plus the commands left over.
 
-    `defs` are the deliverable's own macros (see `macros`); they are expanded first.
+    `defs` are the deliverable's own macros (see `macros`); they are expanded first. `lang` sets the
+    quotation marks (de: „…“); without it they are English (“…”).
     """
+    q_open, q_close = QUOTES.get(lang[:2], QUOTES["en"])
     held: list[str] = []                            # code and mathematics stay as they are
 
     def keep(text: str) -> str:
@@ -272,7 +298,8 @@ def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tup
     s = re.sub(r"(?s)\\\[(.*?)\\\]", lambda m: "\n\n$$" + m.group(1).strip() + "$$\n\n", s)
     s = _boxes(s)
     s = _commands(s, "result", lambda n, o, a: "{{result:%s}}" % a[0].strip())
-    s = s.replace("``", "\u201c")                   # an opening quote, not an empty code span
+    s = s.replace("``", q_open)                     # an opening quote, not an empty code span
+    s = s.replace('"`', q_open).replace("\"'", q_close)     # babel's German shorthands
     s = _MATH.sub(lambda m: keep(m.group(0)), s)
     level = {"section": "#", "subsection": "##", "subsubsection": "###"}
 
@@ -285,15 +312,17 @@ def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tup
     s = _commands(s, "[cC]ref|ref|autoref|eqref|pageref", lambda n, o, a: "{{ref:%s}}" % a[0].strip())
     s = _commands(s, "href", lambda n, o, a: f"[{a[1]}]({a[0]})", nargs=2)
     wrap = {"emph": "*{}*", "textit": "*{}*", "textbf": "**{}**", "texttt": "`{}`", "url": "<{}>",
-            "enquote": "\u201c{}\u201d", "footnote": "^[{}]", "paragraph": "**{}.**", "textsc": "{}", "mbox": "{}"}
+            "enquote": q_open + "{}" + q_close, "footnote": "^[{}]", "paragraph": "**{}.**", "textsc": "{}", "mbox": "{}"}
     for _ in range(3):                              # nested markup
         s = _commands(s, "|".join(wrap), lambda n, o, a: wrap[n].format(
             a[0].strip().rstrip(".") if n == "paragraph" else a[0].strip()))
     s = re.sub(r"\\label\{[^}]*\}", "", s)
+    # as in LaTeX, the spaces after a command word are not text (\quad A); after \cmd{} or "\cmd\ " they are
+    s = re.sub(r"\\(%s)(?![a-zA-Z])(?:\{\}|[ \t]*)" % "|".join(_SYMBOLS), lambda m: _SYMBOLS[m.group(1)], s)
     for a, b in (("\\-", ""), ("\\texttimes", "×"), ("\\textendash", "–"), ("\\textemdash", "—"),
                  ("\\LaTeX", "LaTeX"), ("\\TeX", "TeX"), ("\\ldots", "\u2026"), ("\\dots", "\u2026"), ("\\,", "\u202f"), ("\\%", "%"), ("\\&", "&"), ("\\_", "_"), ("\\#", "#"), ("\\$", "$"),
                  ("\\ ", " "), ("\\@", ""), ("~", "\u00a0"), ("---", "\u2014"), ("--", "\u2013"),
-                 ("``", "\u201c"), ("''", "\u201d"), ("\\\\", "  \n"), ("\\par", "\n\n"),
+                 ("``", q_open), ("''", q_close), ("\\\\", "  \n"), ("\\par", "\n\n"),
                  ("\\noindent", ""), ("\\clearpage", ""), ("\\newpage", ""), ("\\medskip", ""),
                  ("\\smallskip", ""), ("\\bigskip", ""), ("\\centering", "")):
         s = s.replace(a, b)
@@ -305,14 +334,14 @@ def to_markdown(tex: str, defs: dict[str, tuple[int, str]] | None = None) -> tup
 
 
 # ------------------------------------------------------------------ the handover folder
-def _meta(main_text: str) -> dict:
+def _meta(main_text: str, lang: str = "") -> dict:
     pre = strip_comments(main_text.split("\\begin{document}")[0])
     out = {}
     for name in ("title", "subtitle", "author", "date", "keywords"):
         m = re.search(r"\\%s(?![a-zA-Z])" % name, pre)
         g = _group(pre, m.end()) if m else None
         if g and g[0].strip():
-            out[name] = to_markdown(g[0])[0].strip()
+            out[name] = to_markdown(g[0], lang=lang)[0].strip()
     return out
 
 
@@ -328,17 +357,17 @@ def _inline(text: str, folder: Path) -> str:
     return re.sub(r"\\input\{([^}]+)\}", one, text)
 
 
-def _section_markdown(f: Path, folder: Path) -> tuple[str, list[str]]:
+def _section_markdown(f: Path, folder: Path, lang: str = "") -> tuple[str, list[str]]:
     """Markdown of one section file of a deliverable folder, and the LaTeX commands left over."""
     text = f.read_text(encoding="utf-8")
     if f.suffix != ".tex":
         return text, []
     main = deliverable.main_tex(folder)
     defs = macros(main.read_text(encoding="utf-8").split("\\begin{document}")[0]) if main else {}
-    return to_markdown(_inline(text, folder), defs)
+    return to_markdown(_inline(text, folder), defs, language(main.read_text(encoding="utf-8"), lang) if main else lang)
 
 
-def _sections(folder: Path) -> tuple[dict, list[tuple[Path, bool]]]:
+def _sections(folder: Path, lang: str = "") -> tuple[dict, list[tuple[Path, bool]]]:
     """(metadata, [(section file, in appendix)]) of a deliverable folder, in document order."""
     main = deliverable.main_tex(folder)
     if main is None:
@@ -351,7 +380,7 @@ def _sections(folder: Path) -> tuple[dict, list[tuple[Path, bool]]]:
         f = f if f.suffix else f.with_suffix(".tex")
         if f.exists():
             files.append((f, cut != -1 and m.start() > cut))
-    return _meta(main.read_text(encoding="utf-8")), files
+    return _meta(main.read_text(encoding="utf-8"), language(main.read_text(encoding="utf-8"), lang)), files
 
 
 def used(text: str) -> dict[str, list[str]]:
@@ -367,10 +396,10 @@ def rendered(project: config.Project, folder: Path) -> str:
     """One Markdown document of a deliverable with the recorded numbers filled in (for the
     publication bundle of a project without a PDF).  Citations stay as `[@key]`."""
     res = results.load(project)
-    meta, files = _sections(folder)
+    meta, files = _sections(folder, project.lang)
     parts = [f"# {meta.get('title') or project.title}\n"]
     for f, _ in files:
-        parts.append(_section_markdown(f, folder)[0])
+        parts.append(_section_markdown(f, folder, project.lang)[0])
     doc = "\n".join(parts)
     doc = MD_RESULT.sub(lambda m: str(res[m.group(1)]["display"]) if m.group(1) in res else m.group(0), doc)
     doc = re.sub(r"\{\{table:([^}]+)\}\}", r"[Table: \1](tables/\1.csv)", doc)
@@ -398,10 +427,10 @@ def build(project: config.Project | None = None) -> dict:
                  "commit": _commit(p.root), "deliverables": [], "problems": []}
     seen = {k: set() for k in ("results", "citations", "tables", "figures")}
     for d in deliverable.folders(p, markdown=True):
-        meta, files = _sections(d)
+        meta, files = _sections(d, p.lang)
         entry = {"name": d.name, **meta, "sections": [], "unconverted": []}
         for f, appendix in files:
-            text, left = _section_markdown(f, d)
+            text, left = _section_markdown(f, d, p.lang)
             text = re.sub(r"\]\(figures/([^)\s.]+)\)", lambda m: "](figures/%s)" % (
                 figures[m.group(1)].name if m.group(1) in figures else m.group(1)), text)
             rel = f"{d.name}/{f.stem}.md"

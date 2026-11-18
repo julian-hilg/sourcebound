@@ -34,6 +34,7 @@ OTHER_MAIN = ("application/vnd.openxmlformats-officedocument.wordprocessingml.te
 MACRO_PARTS = re.compile(r"word/(vbaProject\.bin|vbaData\.xml|_rels/vbaProject\.bin\.rels)$|customUI/|word/customizations\.xml$", re.I)
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 TAG_MAX = 64
+BOX = "sb:box"                                      # the description of a table that is a note box, not a table
 
 
 # ------------------------------------------------------------------ opening
@@ -229,6 +230,9 @@ def body_blocks(body) -> list[dict]:
                     text = text.replace("{{sb:sources}}", "")
                 if text.strip():
                     out.append({"kind": "p", "text": text, "el": el})
+            elif el.tag == qn("w:tbl") and is_box(el):
+                for tc in el.iter(qn("w:tc")):
+                    walk(tc)                        # a note box: its paragraphs are text
             elif el.tag == qn("w:tbl"):
                 rows = [" | ".join(canonical_cell(c) for c in r.findall(qn("w:tc"))) for r in el.findall(qn("w:tr"))]
                 out.append({"kind": "table", "text": "\n".join(rows), "el": el})
@@ -240,6 +244,11 @@ def body_blocks(body) -> list[dict]:
                     walk(content)                   # a cover page of a corporate template is often one
     walk(body)
     return out
+
+
+def is_box(tbl) -> bool:
+    d = tbl.find(f"{qn('w:tblPr')}/{qn('w:tblDescription')}")
+    return d is not None and d.get(qn("w:val")) == BOX
 
 
 def canonical_cell(tc) -> str:

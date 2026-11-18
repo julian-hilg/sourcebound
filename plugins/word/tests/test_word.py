@@ -382,7 +382,7 @@ def test_a_deliverable_with_sections_figure_and_appendix(desk, tmp_path):
     assert texts[:3] == ["A Paper", "Working Paper", "A. Author 2026-11-16"[:10] + texts[2][10:]]
     assert "Abbildung 1. Die Grafik" in texts and "Tabelle 1. Die Tabelle" in texts
     assert "[none.pdf is not among the project's figures]" in texts
-    assert "Siehe Abbildung 1, Tabelle 1 und Abschnitt “Einleitung”." in texts
+    assert "Siehe Abbildung 1, Tabelle 1 und Abschnitt „Einleitung“." in texts    # German quotation marks
     assert texts.index("Quellen") < texts.index("Anhang")           # the sources stand before the appendix
     assert len(d.inline_shapes) == 1 and [c.text for c in d.tables[0].rows[1].cells] == ["a", "1,5"]
     m = ooxml.read_manifest(d)
@@ -467,3 +467,143 @@ def test_a_template_can_ask_for_citation_fields_or_for_no_store(desk):
     cfg.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
     f.unlink()
     assert "<b:Source>" not in store_of(render_piece(desk))        # the template's own (empty) store is left alone
+
+
+def vector_pdf(path: Path) -> None:
+    """A one-page PDF as TikZ writes one: a framed box with a bold title, a grey bar, a thick line."""
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    w = PdfWriter()
+    page = w.add_blank_page(200, 100)
+    font = lambda name: w._add_object(DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+                                                        NameObject("/BaseFont"): NameObject(name), NameObject("/Encoding"): NameObject("/WinAnsiEncoding")}))
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+        {NameObject("/F1"): font("/Times-Bold"), NameObject("/F2"): font("/Times-Roman")})})
+    s = DecodedStreamObject()
+    s.set_data(b"0.4 w 0 G 10 10 80 40 re S 0.3 g 120 10 60 20 re f 0 G 1.2 w 90 30 m 120 20 l S "
+               b"BT /F1 9 Tf 30 35 Td (Ansparphase) Tj /F2 9 Tf 0 -11 Td (Zulagen) Tj ET")
+    page[NameObject("/Contents")] = w._add_object(s)
+    with path.open("wb") as fh:
+        w.write(fh)
+
+
+def test_a_vector_figure_becomes_a_drawing_in_the_designs_look(desk, tmp_path):
+    from sourcebound import assets, config, render as core
+    from sourcebound_word import drawing, ooxml, render
+    vector_pdf(tmp_path / "phasen.pdf")
+    fig = drawing.read(tmp_path / "phasen.pdf")
+    assert [ln.text for ln in fig.lines] == ["Ansparphase", "Zulagen"] and fig.lines[0].runs[0][1] is True      # bold kept
+    assert len(fig.paths) == 3 and fig.paths[0].is_box()
+    assert drawing.read(tmp_path / "missing.pdf") is None                                # unreadable: the renderer shows a picture
+    design = assets.design(None)
+    design["fonts"] = {**design["fonts"], "faces": [{"weight": 700, "local": ["Firm Bold"]}]}
+    p = config.project(desk)
+    doc = core.Document(project=p, name="paper", kind="deliverable", title="A Paper", lang="de", folder=desk / "deliverables" / "paper",
+                        sections=[core.Section("01", "Text.\n\n![Phasen](figures/phasen.pdf){#fig:p}\n")],
+                        figures={"phasen.pdf": tmp_path / "phasen.pdf"})
+    out = tmp_path / "out"
+    out.mkdir()
+    f = render.render(doc, assets.template("report"), design, out)[0]
+    xml = zipfile.ZipFile(f).read("word/document.xml").decode("utf-8")
+    hexc = lambda c: f'<a:srgbClr val="{c.lstrip("#").upper()}"/>'
+    assert "wordprocessingGroup" in xml and "<pic:pic" not in xml                         # Word's own shapes, no picture
+    assert hexc(design["colors"]["surface"]) in xml                                      # the framed box: the surface colour
+    assert hexc(design["palette"][0]) in xml                                             # the grey bar: the first series colour
+    assert hexc(design["colors"]["accent"]) in xml                                       # the thick line: the accent
+    assert 'w:ascii="Firm Bold"' in xml and ">Ansparphase<" in xml and "Times" not in xml   # the design's faces, no serif
+    assert ooxml.read_manifest(Document(str(f)))["notes"]["figures_drawn"] == 1
+
+
+BOXED = """Er sagte "ja" und “nein”.
+
+| A | B |
+| --- | --- |
+| 1 | 2 |
+
+: Mit Titel
+
+| C | D |
+| --- | --- |
+| 3 | 4 |
+
+1. eins
+
+2. zwei
+
+3. drei
+
+Dazwischen.
+
+1. neu
+
+> **Beispiel.**
+>
+> Ein Text im Kasten mit **fett**.
+>
+> 1. erstens
+> 2. zweitens
+"""
+
+
+def test_boxes_lists_quotes_and_captions(desk, tmp_path):
+    from sourcebound import assets, config, render as core
+    from sourcebound_word import ooxml, render, roundtrip
+    design = assets.design(None)
+    design["fonts"] = {**design["fonts"], "faces": [{"weight": 400, "local": ["Firm"]}, {"weight": 700, "local": ["Firm Bold"]}]}
+    p = config.project(desk)
+    doc = core.Document(project=p, name="paper", kind="deliverable", title="A Paper", lang="de", folder=desk / "deliverables" / "paper",
+                        sections=[core.Section("01", BOXED, source="deliverables/paper/sections/01.md")])
+    out = tmp_path / "out"
+    out.mkdir()
+    f = render.render(doc, assets.template("report"), design, out)[0]
+    d = Document(str(f))
+    texts = [ooxml.plain(x) for x in body_paragraphs(d)]
+    assert "Er sagte „ja“ und „nein“." in texts                     # German quotation marks
+    assert [t for t in texts if t.startswith("Tabelle")] == ["Tabelle 1. Mit Titel"]     # no number for a table without caption
+    num = lambda text: find(d, text).find(f"{qn('w:pPr')}/{qn('w:numPr')}/{qn('w:numId')}").get(qn("w:val"))
+    assert num("eins") == num("zwei") == num("drei") != num("neu")                      # a loose list is one list
+    box = [t for t in d.element.body.iter(qn("w:tbl")) if ooxml.is_box(t)]
+    assert len(box) == 1
+    inner = [ooxml.plain(x) for x in box[0].iter(qn("w:p"))]
+    assert inner[:2] == ["Beispiel.", "Ein Text im Kasten mit fett."] and "erstens" in inner and "zweitens" in inner
+    assert num("erstens") == num("zweitens")
+    bold = find(d, "Kasten").xpath(".//w:r[w:t='fett']")[0]
+    assert bold.find(f"{qn('w:rPr')}/{qn('w:rFonts')}").get(qn("w:ascii")) == "Firm Bold"
+    assert bold.find(f"{qn('w:rPr')}/{qn('w:b')}") is None                                # the bold face, not a synthetic bold
+    md = Path(roundtrip.pull(f, out=tmp_path / "back.md")["written"]).read_text(encoding="utf-8")
+    assert "> **Beispiel.**" in md and "> 1. erstens" in md                              # an unchanged box comes back as written
+    bold.find(qn("w:t")).text = "sehr fett"                                              # an edit: the bold face reads as bold
+    d.save(str(tmp_path / "edited.docx"))
+    md = Path(roundtrip.pull(tmp_path / "edited.docx", out=tmp_path / "back2.md")["written"]).read_text(encoding="utf-8")
+    assert "**sehr fett**" in md
+
+
+def test_placeholders_leave_a_paragraph_that_holds_a_text_box(desk, tmp_path):
+    from docx.oxml import parse_xml
+    from sourcebound import assets, config, render as core
+    from sourcebound_word import ooxml
+    from sourcebound_word.render import Writer
+    p = config.project(desk)
+    doc = core.Document(project=p, name="paper", kind="deliverable", title="A Paper", lang="en", folder=desk, sections=[])
+    w = Writer(doc, assets.template("report"), assets.design(None), tmp_path)
+    ns = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+          'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"')
+    outer = parse_xml(f'<w:p {ns}><w:r><w:t>Cover </w:t></w:r><w:r><wps:txbx><w:txbxContent><w:p><w:r><w:t>{{{{title}}}}</w:t></w:r></w:p>'
+                      f'</w:txbxContent></wps:txbx></w:r><w:r><w:t xml:space="preserve"> stays</w:t></w:r></w:p>')
+    w.body.insert(0, outer)
+    w._placeholders()
+    inner = outer.find(f".//{qn('w:txbxContent')}/{qn('w:p')}")
+    assert ooxml.plain(inner) == "A Paper"                                               # the box's own paragraph is filled in
+    assert [t.text for t in outer.findall(f"{qn('w:r')}/{qn('w:t')}")] == ["Cover ", " stays"]   # the paragraph around it is kept
+
+
+def test_german_quotes_and_column_widths():
+    from sourcebound_word.markdown import german_quotes, spans
+    text = lambda s: "".join(x["s"] for x in german_quotes(spans(s)))
+    assert text('Das „Gesetz“, ein "Wort", ein “Zitat” und geht’s.') == "Das „Gesetz“, ein „Wort“, ein „Zitat“ und geht’s."
+    assert text("`\"code\"` bleibt") == '"code" bleibt'
+    from sourcebound_word.render import column_shares
+    rows = [["Anbietergruppe", "Standarddepot", "Eigene Fonds"], ["Volksbanken und Raiffeisenbanken (Union Investment)", "ja", "ja"]]
+    a, b, c = column_shares(rows, capacity=60)
+    assert abs(a + b + c - 1) < 1e-9 and a > b > c                     # more text, more room ...
+    assert b * 60 >= len("Standarddepot") + 2                          # ... but every column holds its longest word

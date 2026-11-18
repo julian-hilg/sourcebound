@@ -3,8 +3,8 @@
 Blocks (dicts with `type`):
     heading   level, spans, label, md
     para      spans, md
-    list      ordered, items [(depth, spans)], md
-    quote     spans, md
+    list      ordered, start, items [(depth, spans)], md
+    quote     spans, blocks (what the quote holds, as blocks), md
     code      text, md
     math      text, md
     table     name | rows, caption (spans), label, note (spans), md
@@ -187,9 +187,13 @@ def blocks(text: str, *, known=None) -> list[dict]:
                     items.append([min(len(m.group(1).expandtabs(4)) // 2, 2), m.group(3)])
                 elif items:
                     items[-1][1] += " " + line.strip()
-            out.append({"type": "list", "ordered": bool(re.match(r"\s*\d", p)), "items": [(d, sp(t)) for d, t in items], "md": p})
+            first = re.match(r"\s*(\d+)", p)
+            out.append({"type": "list", "ordered": bool(first), "start": int(first.group(1)) if first else 1,
+                        "items": [(d, sp(t)) for d, t in items], "md": p})
         elif all(line.lstrip().startswith(">") for line in p.split("\n")):
-            out.append({"type": "quote", "spans": sp(" ".join(re.sub(r"^\s*>\s?", "", line) for line in p.split("\n"))), "md": p})
+            inner = [re.sub(r"^\s*>\s?", "", line) for line in p.split("\n")]
+            out.append({"type": "quote", "spans": sp(" ".join(x for x in inner if x.strip())),
+                        "blocks": blocks("\n".join(inner), known=known), "md": p})
         else:
             out.append({"type": "para", "spans": sp(p), "md": p})
         i += 1
@@ -201,3 +205,36 @@ def cite_markdown(keys: list[str], locator: str, textual: bool) -> str:
     if textual and len(keys) == 1:
         return f"@{keys[0]}" + (f" [{locator}]" if locator else "")
     return "[" + "; ".join(f"@{k}" for k in keys) + (f", {locator}" if locator else "") + "]"
+
+
+def german_quotes(spans: list[dict]) -> list[dict]:
+    """Quotation marks as German sets them: „…“ and ‚…‘ (the text of code stays as written).
+
+    English marks (“…”), straight ones ("…") and German ones already in place all end up German;
+    an apostrophe (’ without an open single quote) stays an apostrophe.
+    """
+    double = single = False                         # a quote is open
+    out = []
+    for s in spans:
+        if s["t"] != "text" or s.get("code"):
+            out.append(s)
+            continue
+        chars = []
+        for ch in s["s"]:
+            if ch == "„":                       # „ opens
+                double = True
+            elif ch == "“":                     # “ opens (English) or closes (German)
+                ch, double = ("“", False) if double else ("„", True)
+            elif ch == "”":                     # ” closes
+                ch, double = "“", False
+            elif ch == '"':                         # straight: open where none is open, close otherwise
+                ch, double = ("“", False) if double else ("„", True)
+            elif ch == "‚":
+                single = True
+            elif ch == "‘":
+                ch, single = ("‘", False) if single else ("‚", True)
+            elif ch == "’" and single:
+                ch, single = "‘", False
+            chars.append(ch)
+        out.append({**s, "s": "".join(chars)})
+    return out

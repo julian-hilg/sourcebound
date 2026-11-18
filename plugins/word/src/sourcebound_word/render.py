@@ -24,15 +24,16 @@ from pathlib import Path
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
 from docx.shared import Cm, Emu, Pt, RGBColor
 
 from sourcebound import render as core
 
-from . import markdown, ooxml, sources as wsources, template as tpl
+from . import drawing, markdown, ooxml, sources as wsources, template as tpl
 
 FORMAT = {"format": "sourcebound-word", "version": 1}
+BOX = ooxml.BOX
 NUMERIC = re.compile(r"^(?:[\s+\-−–]?[\d.,\s]+(?:[%‰]|\s?[a-zA-Zµ€$]{1,4})?|[–—-])$")
 WORDS = {"en": {"table": "Table", "figure": "Figure", "section": "Section", "sources": "Sources"},
          "de": {"table": "Tabelle", "figure": "Abbildung", "section": "Abschnitt", "sources": "Quellen"}}
@@ -40,6 +41,25 @@ WORDS = {"en": {"table": "Table", "figure": "Figure", "section": "Section", "sou
 
 def _plain(spans: list[dict]) -> str:
     return "".join(s.get("s", "") if s["t"] in ("text", "math") else "" for s in spans)
+
+
+def column_shares(rows: list[list[str]], capacity: float = 100) -> list[float]:
+    """Parts of the table width per column. Each column first gets room for its longest word (a word broken
+    over lines reads badly; a compound breaks at its hyphen), the rest of the line goes to the columns
+    with more text. `capacity`: about how many characters of table text fit in one line of the table."""
+    width = max(len(r) for r in rows)
+    plain = lambda s: re.sub(r"[*`]", "", re.sub(r"\{\{[^}]*\}\}|\[@[^\]]*\]", "[00]", s or ""))   # a number or citation: a few characters
+    least, want = [], []
+    for c in range(width):
+        cells = [plain(r[c] if c < len(r) else "") for r in rows]
+        words = [w for x in cells for w in re.split(r"\s+|(?<=-)", x) if w]
+        least.append(max((len(w) for w in words), default=1) + 2)
+        want.append(min(sum(len(x) for x in cells) / max(len(cells), 1) + 2, 45))
+    rest = capacity - sum(least)
+    more = [max(w - m, 0) for w, m in zip(want, least)]
+    if rest > 0 and sum(more):
+        least = [m + rest * x / sum(more) for m, x in zip(least, more)]
+    return [m / sum(least) for m in least]
 
 
 def cite_text(doc: core.Document, style: str, order: list[str], keys: list[str], locator: str, textual: bool) -> str:
@@ -60,9 +80,9 @@ def cite_text(doc: core.Document, style: str, order: list[str], keys: list[str],
 def source_lines(doc: core.Document, style: str, order: list[str]) -> list[str]:
     """The source list: numbered in order of first use, or by author and year."""
     if style == "numbered":
-        return [f"[{n}]\t{core.source_line(k, doc)}" for n, k in enumerate(order, 1)]
+        return [f"[{n}]\t{core.source_line(k, doc, accessed=True)}" for n, k in enumerate(order, 1)]
     label = lambda k: " ".join(core.cite_label(k, doc) or (k, "")).lower()
-    return [core.source_line(k, doc) for k in sorted(order, key=label)]
+    return [core.source_line(k, doc, accessed=True) for k in sorted(order, key=label)]
 
 
 class Writer:
@@ -96,6 +116,10 @@ class Writer:
         self.text_width = Emu(sec.page_width - sec.left_margin - sec.right_margin)
         self.title_md = ""
         self.heading_shift = 0
+        self.bold_font = drawing.bold_face(design)  # bold as a face of its own: never a synthetic bold
+        self.shape_id = 7000
+        self._sink: list | None = None              # body elements being collected for a box
+        self._list = (None, 0)                      # (numbering instance, next number) of the last numbered list
 
     # ---- where the text goes ----------------------------------------------------
     def _marker(self):
@@ -110,6 +134,8 @@ class Writer:
     def _place(self, el, group: int | None):
         if self.marker is not None:
             self.marker.addprevious(el)
+        if self._sink is not None:
+            self._sink.append(el)
         if group is not None:
             self.owner[id(el)] = group
             self._keep.append(el)                   # lxml hands out a new proxy (and a reused id) once nothing refers to one
@@ -128,17 +154,30 @@ class Writer:
         self.sdt_id += 1
         return self.sdt_id
 
+    def bold(self, run) -> None:
+        """Bold: the design's bold face where it names one, Word's bold otherwise."""
+        if self.bold_font:
+            run.font.name = self.bold_font
+            fonts = run._r.get_or_add_rPr().get_or_add_rFonts()
+            for a in ("w:cs", "w:eastAsia"):
+                fonts.set(qn(a), self.bold_font)
+            run.bold = None
+        else:
+            run.bold = True
+
     def cite_text(self, keys: list[str], locator: str, textual: bool) -> str:
         return cite_text(self.doc, self.sources_style, self.order, keys, locator, textual)
 
     def spans(self, p, spans: list[dict], *, bold: bool = False) -> None:
         mono = self.design["fonts"]["mono"][0]
+        if self.doc.german:
+            spans = markdown.german_quotes(spans)
         for s in spans:
             t = s["t"]
             if t == "text":
                 run = p.add_run(s["s"])
                 if s["b"] or bold:
-                    run.bold = True
+                    self.bold(run)
                 if s["i"]:
                     run.italic = True
                 if s["code"]:
@@ -157,7 +196,8 @@ class Writer:
                 key = s["key"]
                 shown = str(self.doc.results[key]["display"]) if key in self.doc.results else f"?{key}"
                 run = p.add_run(shown)
-                run.bold = True if bold else None
+                if bold:
+                    self.bold(run)
                 tag = ooxml.tag_for("result", key, self.controls)
                 ooxml.sdt_run(p, run, tag, f"Result {key}", self._next_id())
                 self.controls[tag] = {"type": "result", "key": key, "shown": shown}
@@ -189,15 +229,27 @@ class Writer:
         fld = OxmlElement("w:fldSimple")
         fld.set(qn("w:instr"), f" SEQ {name} \\* ARABIC ")
         run = p.add_run(str(number))
-        run.bold = True
+        self.bold(run)
         run._r.addprevious(fld)
         fld.append(run._r)
 
+    def caption_form(self, kind: str) -> tuple[str, str, str]:
+        """(position, label, separator) of a caption: the design's (`charts.caption`, `charts.table_caption`:
+        position above|below, prefix per language, separator) or "Figure 1. ..." below and "Table 1. ..." above."""
+        conf = (self.design.get("charts") or {}).get("caption" if kind == "figure" else "table_caption") or {}
+        prefix = conf.get("prefix") or {}
+        prefix = prefix.get(self.doc.lang[:2]) or prefix.get("en") if isinstance(prefix, dict) else prefix
+        return (conf.get("position") or ("below" if kind == "figure" else "above"),
+                prefix or f"{self.words[kind]} ", conf.get("separator") or ". ")
+
     def caption(self, kind: str, number: int, spans: list[dict], group: int):
+        _pos, label, sep = self.caption_form(kind)
         p = self.para(f"{kind}_caption", group)
-        p.add_run(f"{self.words[kind]} ").bold = True
+        self.bold(p.add_run(label))
         self._seq(p, self.words[kind], number)
-        p.add_run(". " if spans else ".").bold = True
+        run = p.add_run(sep if spans else ".")
+        if not spans or sep.strip() in ("", ".", ":"):
+            self.bold(run)                          # "Table 1." is one bold label; a dash between label and text is not
         self.spans(p, spans)
         return p
 
@@ -209,8 +261,13 @@ class Writer:
     def list(self, b: dict, group: int) -> None:
         ordered = b["ordered"]
         style = self.styles.get("numbered" if ordered else "bullet")
-        num_id = self._restart(style) if ordered and style is not None else None
-        n = 0
+        start = b.get("start") or 1
+        num_id = None
+        if ordered and style is not None:
+            # a loose list (items apart by blank lines) comes as one list per item: "2." goes on with the list before
+            last, nxt = self._list
+            num_id = last if start > 1 and last is not None and start == nxt else self._restart(style, start)
+        n = start - 1
         for depth, spans in b["items"]:
             live = style is not None and (not ordered or num_id is not None)
             p = self.para(("numbered" if ordered else "bullet") if live else "body", group)
@@ -225,9 +282,11 @@ class Writer:
                 p.add_run(f"{n}.\t" if ordered and not depth else "•\t" if not ordered else "–\t")
                 p.paragraph_format.first_line_indent = Cm(-0.63)
             self.spans(p, spans)
+        if ordered:
+            self._list = (num_id, start + sum(1 for depth, _ in b["items"] if not depth))
 
-    def _restart(self, style) -> int | None:
-        """A numbering instance of the list style that starts at 1 (Word would continue the last list)."""
+    def _restart(self, style, start: int = 1) -> int | None:
+        """A numbering instance of the list style that starts at `start` (Word would continue the last list)."""
         try:
             num_pr = style.element.find(f"{qn('w:pPr')}/{qn('w:numPr')}/{qn('w:numId')}")
             numbering = self.d.part.numbering_part.element
@@ -243,9 +302,9 @@ class Writer:
         num.append(a)
         over = OxmlElement("w:lvlOverride")
         over.set(qn("w:ilvl"), "0")
-        start = OxmlElement("w:startOverride")
-        start.set(qn("w:val"), "1")
-        over.append(start)
+        first = OxmlElement("w:startOverride")
+        first.set(qn("w:val"), str(start))
+        over.append(first)
         num.append(over)
         numbering.append(num)
         return new_id
@@ -268,9 +327,10 @@ class Writer:
             if i < len(lines) - 1:
                 run.add_break()
 
-    def table(self, b: dict, number: int, group: int) -> None:
-        cap = self.caption("table", number, b["caption"], group)
-        cap.paragraph_format.keep_with_next = True
+    def table(self, b: dict, number: int | None, group: int) -> None:
+        if number is not None:                      # a table without caption and label has no number to show
+            cap = self.caption("table", number, b["caption"], group)
+            cap.paragraph_format.keep_with_next = True
         data = self.doc.tables.get(b["name"]) if b["name"] else None
         if data is not None:
             rows = [data["columns"], *data["rows"]]
@@ -303,6 +363,11 @@ class Writer:
                 if right[c]:
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 self.spans(p, markdown.spans(row[c] if c < len(row) else "", known=known))
+        for col, share in zip(t.columns, column_shares(rows, capacity=self.text_width.pt / 4.6)):
+            w = Emu(int(self.text_width * share))
+            col.width = w                           # the grid, and each cell's preferred width (what Word lays out by)
+            for cell in col.cells:
+                cell.width = w
         if b["note"]:
             p = self.para("table_note", group)
             self.spans(p, b["note"])
@@ -329,21 +394,105 @@ class Writer:
             return png if png.exists() else None
         return None
 
-    def figure(self, b: dict, number: int, group: int) -> None:
-        img = self._image(b["file"])
+    def _native(self, name: str):
+        """A vector figure (PDF) as a drawing of Word's own, in the design's colours and fonts; None where it
+        cannot be read or the template asks for pictures (`figures: image`)."""
+        f = self.doc.figures.get(name)
+        if f is None or Path(f).suffix.lower() != ".pdf" or self.template.get("figures") == "image":
+            return None
+        return drawing.read(Path(f))
+
+    def figure(self, b: dict, number: int | None, group: int) -> None:
+        position, _label, _sep = self.caption_form("figure")
+        if number is not None and position == "above":
+            self.caption("figure", number, b["caption"], group).paragraph_format.keep_with_next = True
         p = self.para("body", group)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.keep_with_next = True
-        if img is None:
-            self.counts["figures_missing"].append(b["file"])
-            why = ("is not among the project's figures" if b["file"] not in self.doc.figures
-                   else "is a PDF, and pdftoppm (poppler) is not installed to convert it" if b["file"].lower().endswith(".pdf")
-                   else "is in a format Word cannot show")
-            p.add_run(f"[{b['file']} {why}]").italic = True
+        p.paragraph_format.keep_with_next = number is not None and position != "above"
+        fig = self._native(b["file"])
+        if fig is not None:
+            p.paragraph_format.space_before = Pt(6)
+            el, self.shape_id = drawing.drawing(fig, self.design, scale=drawing.scale_for(fig, self.text_width.pt),
+                                                shape_id=self.shape_id + 1, name=f"Figure {number or ''}".strip(),
+                                                descr=_plain(b["caption"]))
+            p.add_run()._r.append(el)
+            self.counts["figures_native"] = self.counts.get("figures_native", 0) + 1
         else:
-            width = (self.template.get("figure_width_cm") and Cm(float(self.template["figure_width_cm"]))) or self.text_width
-            p.add_run().add_picture(str(img), width=min(width, self.text_width))
-        self.caption("figure", number, b["caption"], group)
+            img = self._image(b["file"])
+            if img is None:
+                self.counts["figures_missing"].append(b["file"])
+                why = ("is not among the project's figures" if b["file"] not in self.doc.figures
+                       else "is a PDF, and pdftoppm (poppler) is not installed to convert it" if b["file"].lower().endswith(".pdf")
+                       else "is in a format Word cannot show")
+                p.add_run(f"[{b['file']} {why}]").italic = True
+            else:
+                width = (self.template.get("figure_width_cm") and Cm(float(self.template["figure_width_cm"]))) or self.text_width
+                p.add_run().add_picture(str(img), width=min(width, self.text_width))
+        if number is not None and position != "above":
+            self.caption("figure", number, b["caption"], group)
+
+    def block(self, b: dict, g: int) -> None:
+        kind = b["type"]
+        if kind == "heading":
+            self.heading(b, g)
+        elif kind == "para":
+            self.spans(self.para("body", g), b["spans"])
+        elif kind == "list":
+            self.list(b, g)
+        elif kind == "quote":
+            inner = b.get("blocks") or []
+            if len(inner) > 1 or any(x["type"] != "para" for x in inner):
+                self.box(inner, g)
+                return
+            p = self.para("quote" if self.styles.get("quote") is not None else "body", g)
+            if self.styles.get("quote") is None:
+                p.paragraph_format.left_indent = Cm(0.8)
+            self.spans(p, b["spans"])
+        elif kind == "code":
+            self.code(b, g)
+        elif kind == "math":
+            p = self.para("body", g)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self.spans(p, [{"t": "math", "s": b["text"]}])
+        elif kind == "table":
+            self.table(b, b.get("number"), g)
+        elif kind == "figure":
+            self.figure(b, b.get("number"), g)
+
+    def box(self, blocks: list[dict], g: int) -> None:
+        """A quote of more than one paragraph (a note box: title, text, a list) as a framed box in the
+        text's own styles: one table cell in the design's surface colour with a rule in its accent colour.
+        A quote style would set all of it as one paragraph, often in italics."""
+        t = self.d.add_table(rows=1, cols=1)
+        self._place(t._tbl, g)
+        pr = t._tbl.tblPr
+        colors = self.design["colors"]
+        accent, surface = colors["accent"].lstrip("#"), colors["surface"].lstrip("#")
+        for child in list(pr):                      # python-docx's defaults; the schema wants its own order below
+            if child.tag != qn("w:tblStyle"):
+                pr.remove(child)
+        pr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="5000" w:type="pct"/>'))
+        pr.append(parse_xml(f'<w:tblBorders {nsdecls("w")}><w:top w:val="nil"/><w:left w:val="single" w:sz="18" w:space="0" w:color="{accent}"/>'
+                            f'<w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'))
+        pr.append(parse_xml(f'<w:tblCellMar {nsdecls("w")}><w:top w:w="113" w:type="dxa"/><w:left w:w="170" w:type="dxa"/>'
+                            f'<w:bottom w:w="57" w:type="dxa"/><w:right w:w="170" w:type="dxa"/></w:tblCellMar>'))
+        pr.append(parse_xml(f'<w:tblDescription {nsdecls("w")} w:val="{BOX}"/>'))
+        tc = t.rows[0].cells[0]._tc
+        tc.get_or_add_tcPr().append(parse_xml(f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{surface}"/>'))
+        outer, self._sink = self._sink, []
+        try:
+            for inner in blocks:
+                self.block(inner, g)
+            made = self._sink
+        finally:
+            self._sink = outer
+        for el in made:
+            if el.getparent() is not None and el.getparent().tag != qn("w:tc"):
+                tc.append(el)
+        for p in tc.findall(qn("w:p"))[:1]:
+            if not ooxml.plain(p).strip() and len(tc.findall(qn("w:p"))) > 1 and p not in made:
+                tc.remove(p)                        # the cell's own empty paragraph
+        self.para("body", None)                     # a table that touches the next one is joined to it by Word
 
     # ---- the whole document ------------------------------------------------------
     def _blocks(self) -> list[tuple[str, dict]]:
@@ -390,6 +539,8 @@ class Writer:
                     continue
         for root in parts:
             for p in list(root.iter(qn("w:p"))):
+                if p.find(f".//{qn('w:p')}") is not None:
+                    continue                        # it holds a text box: the box's own paragraphs are filled in one by one
                 text = ooxml.plain(p)
                 if id(p) in self.owner or "{{" not in text or not any("{{%s}}" % k in text for k in values):
                     continue
@@ -416,7 +567,9 @@ class Writer:
         # pass 1: numbers of tables and figures, where a reference points, the order of the sources
         nt = nf = 0
         for _src, b in blocks:
-            if b["type"] == "table":
+            if b["type"] in ("table", "figure") and not b["caption"] and not b["label"]:
+                b["number"] = None                  # nothing to say and nothing points to it: no "Table 3." label
+            elif b["type"] == "table":
                 nt += 1
                 b["number"] = nt
                 if b["label"]:
@@ -427,7 +580,8 @@ class Writer:
                 if b["label"]:
                     self.targets[b["label"]] = f"{self.words['figure']} {nf}"
             elif b["type"] == "heading" and b.get("label"):
-                self.targets[b["label"]] = f"{self.words['section']} “{_plain(b['spans']).strip()}”"
+                q = ("„", "“") if self.doc.german else ("“", "”")
+                self.targets[b["label"]] = f"{self.words['section']} {q[0]}{_plain(b['spans']).strip()}{q[1]}"
             for s in self._walk_spans(b):
                 if s["t"] == "cite":
                     self.order += [k for k in s["keys"] if k not in self.order]
@@ -447,29 +601,7 @@ class Writer:
                 self._sources()
                 done_sources = True
             self.groups.append({"md": b["md"], "section": src, "type": b["type"]})
-            g = len(self.groups) - 1
-            kind = b["type"]
-            if kind == "heading":
-                self.heading(b, g)
-            elif kind == "para":
-                self.spans(self.para("body", g), b["spans"])
-            elif kind == "list":
-                self.list(b, g)
-            elif kind == "quote":
-                p = self.para("quote" if self.styles.get("quote") is not None else "body", g)
-                if self.styles.get("quote") is None:
-                    p.paragraph_format.left_indent = Cm(0.8)
-                self.spans(p, b["spans"])
-            elif kind == "code":
-                self.code(b, g)
-            elif kind == "math":
-                p = self.para("body", g)
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                self.spans(p, [{"t": "math", "s": b["text"]}])
-            elif kind == "table":
-                self.table(b, b["number"], g)
-            elif kind == "figure":
-                self.figure(b, b["number"], g)
+            self.block(b, len(self.groups) - 1)
         if not done_sources:
             self._sources()
         if self.marker is not None:
@@ -512,8 +644,9 @@ class Writer:
                 "missing_results": [k for k in used if k not in self.doc.results],
                 "sources": {"style": self.sources_style, "order": self.order, "text": "\n".join(self.source_lines(self.order))},
                 "title_md": self.title_md, "heading_shift": self.heading_shift,
-                "controls": self.controls, "styles": by_id, "groups": self.groups, "blocks": blocks,
+                "controls": self.controls, "styles": by_id, "bold_font": self.bold_font, "groups": self.groups, "blocks": blocks,
                 "notes": {"mathematics_as_text": self.counts["math"], "figures_not_shown": self.counts["figures_missing"],
+                          "figures_drawn": self.counts.get("figures_native", 0),
                           "template_was_dotx_or_dotm": self.info["was_template"], "macros_left_out": self.info["macros_dropped"],
                           "styles_added": self.added_styles,
                           "word_sources": {"mode": self.word_sources, "in_store": len(self.word_tags)}}}

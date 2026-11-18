@@ -274,7 +274,7 @@ def refresh(path: Path, project: str | Path | None = None, *, sources: bool = Fa
 
 
 # ------------------------------------------------------------------ pull
-def _run_format(r, mono_fonts: tuple) -> tuple[str, str]:
+def _run_format(r, mono_fonts: tuple, bold_font: str | None = None) -> tuple[str, str]:
     """(format, text) of a run: "" | b | i | bi | code | math."""
     text = ooxml.plain(r)
     rpr = r.find(qn("w:rPr"))
@@ -288,7 +288,7 @@ def _run_format(r, mono_fonts: tuple) -> tuple[str, str]:
         return "code", text
     if font == "Cambria Math":
         return "math", text
-    return ("b" if on("w:b") else "") + ("i" if on("w:i") else ""), text
+    return ("b" if on("w:b") or (bold_font and font == bold_font) else "") + ("i" if on("w:i") else ""), text
 
 
 def _wrap(fmt: str, text: str) -> str:
@@ -332,7 +332,7 @@ def _inline_markdown(p, d, manifest: dict, typed: list) -> str:
                 text = ooxml.plain(node)
                 out.append(("raw", f"<{url}>" if url == text else f"[{text}]({url})" if url else text))
             elif node.tag == qn("w:r"):
-                fmt, text = _run_format(node, mono)
+                fmt, text = _run_format(node, mono, manifest.get("bold_font"))
                 if text:
                     # Word splits one phrase into several runs: neighbours of one format are one phrase
                     if out and out[-1][0] == fmt and fmt != "raw":
