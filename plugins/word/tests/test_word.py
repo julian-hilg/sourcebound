@@ -578,6 +578,35 @@ def test_boxes_lists_quotes_and_captions(desk, tmp_path):
     assert "**sehr fett**" in md
 
 
+def test_template_styles_use_the_bold_face_not_a_synthetic_bold(desk, tmp_path):
+    from docx.oxml import parse_xml
+    from sourcebound import assets, config, render as core
+    from sourcebound_word.render import Writer
+    design = assets.design(None)
+    design["fonts"] = {**design["fonts"], "body": ["Firm"], "faces": [{"weight": 400, "local": ["Firm"]}, {"weight": 700, "local": ["Firm Bold"]}]}
+    w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    template = Document()
+    styles = template.styles.element
+    for xml in (f'<w:style xmlns:w="{w}" w:type="character" w:styleId="A"><w:name w:val="A"/><w:rPr><w:rFonts w:ascii="Firm Bold" w:hAnsi="Firm Bold"/><w:b/><w:bCs/></w:rPr></w:style>',
+                f'<w:style xmlns:w="{w}" w:type="character" w:styleId="B"><w:name w:val="B"/><w:rPr><w:b/></w:rPr></w:style>',
+                f'<w:style xmlns:w="{w}" w:type="character" w:styleId="C"><w:name w:val="C"/><w:rPr><w:rFonts w:ascii="Other Serif" w:hAnsi="Other Serif"/><w:b/></w:rPr></w:style>',
+                f'<w:style xmlns:w="{w}" w:type="character" w:styleId="D"><w:name w:val="D"/><w:rPr><w:b w:val="0"/></w:rPr></w:style>'):
+        styles.append(parse_xml(xml))
+    template.save(str(tmp_path / "t.docx"))
+    p = config.project(desk)
+    doc = core.Document(project=p, name="paper", kind="deliverable", title="A Paper", lang="de", folder=desk / "deliverables" / "paper",
+                        sections=[core.Section("01", "Text.\n")])
+    writer = Writer(doc, {**assets.template("report"), "folder": str(tmp_path), "file": "t.docx"}, design, tmp_path)
+    style = {s.get(qn("w:styleId")): s for s in writer.d.styles.element.iter(qn("w:style"))}
+    bold = lambda sid: style[sid].find(f"{qn('w:rPr')}/{qn('w:b')}")
+    face = lambda sid: style[sid].find(f"{qn('w:rPr')}/{qn('w:rFonts')}").get(qn("w:ascii"))
+    assert bold("A") is None and face("A") == "Firm Bold"                 # the bold face already: no switch on top
+    assert bold("B") is None and face("B") == "Firm Bold"                 # bold in the body font: the bold face instead
+    assert bold("C") is not None and face("C") == "Other Serif"           # another typeface: left as it is
+    assert bold("D") is not None                                          # bold switched off: nothing to do
+    assert {"A", "B"} <= set(writer.styles_fixed) and "C" not in writer.styles_fixed
+
+
 def test_placeholders_leave_a_paragraph_that_holds_a_text_box(desk, tmp_path):
     from docx.oxml import parse_xml
     from sourcebound import assets, config, render as core

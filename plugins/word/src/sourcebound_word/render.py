@@ -117,6 +117,7 @@ class Writer:
         self.title_md = ""
         self.heading_shift = 0
         self.bold_font = drawing.bold_face(design)  # bold as a face of its own: never a synthetic bold
+        self.styles_fixed = self._real_bold_in_styles()
         self.shape_id = 7000
         self._sink: list | None = None              # body elements being collected for a box
         self._list = (None, 0)                      # (numbering instance, next number) of the last numbered list
@@ -153,6 +154,60 @@ class Writer:
     def _next_id(self) -> int:
         self.sdt_id += 1
         return self.sdt_id
+
+    def _real_bold_in_styles(self) -> list[str]:
+        """Where the design has a bold face of its own (e.g. "Example-Bold"), a template style must
+        not switch on Word's bold: on that face it thickens a face that is bold already, on the body
+        font it draws a synthetic bold. A style with bold on in the body font (or naming no font)
+        gets the bold face instead; a style in the bold face loses the switch. Styles in other
+        typefaces are left as they are. Returns the ids of the styles changed."""
+        if not self.bold_font:
+            return []
+        body = (self.design.get("fonts", {}).get("body") or [""])[0]
+        theme = self._theme_fonts()
+        changed = []
+        for style in self.d.styles.element.iter(qn("w:style")):
+            rpr = style.find(qn("w:rPr"))
+            if rpr is None:
+                continue
+            on = [b for b in (rpr.find(qn("w:b")), rpr.find(qn("w:bCs")))
+                  if b is not None and b.get(qn("w:val"), "true").lower() in {"1", "true", "on"}]
+            if not on:
+                continue
+            fonts = rpr.find(qn("w:rFonts"))
+            face = None
+            if fonts is not None:                    # a theme font wins over a named one
+                slot = fonts.get(qn("w:asciiTheme"))
+                face = theme.get(slot[:5], slot) if slot else fonts.get(qn("w:ascii"))
+            if face not in (None, body, self.bold_font):
+                continue
+            if face != self.bold_font:
+                fonts = fonts if fonts is not None else rpr.get_or_add_rFonts()
+                for a in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+                    fonts.set(qn(a), self.bold_font)
+                for a in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme", "w:eastAsiaTheme"):
+                    fonts.attrib.pop(qn(a), None)    # a theme font would win over the named face
+            for b in on:
+                rpr.remove(b)
+            changed.append(style.get(qn("w:styleId")))
+        return changed
+
+    def _theme_fonts(self) -> dict[str, str]:
+        """{"major": typeface, "minor": typeface} of the template's theme (Latin script), where it has one."""
+        from docx.opc.constants import RELATIONSHIP_TYPE as RT
+        try:
+            theme = self.d.part.part_related_by(RT.THEME)
+        except KeyError:
+            return {}
+        from lxml import etree
+        root = etree.fromstring(theme.blob)
+        ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+        out = {}
+        for key in ("major", "minor"):
+            hit = root.find(f".//a:{key}Font/a:latin", ns)
+            if hit is not None and hit.get("typeface"):
+                out[key] = hit.get("typeface")
+        return out
 
     def bold(self, run) -> None:
         """Bold: the design's bold face where it names one, Word's bold otherwise."""
