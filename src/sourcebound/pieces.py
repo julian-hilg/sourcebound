@@ -476,7 +476,7 @@ def prepare_export(dest: Path, piece_id: str) -> None:
     dest.mkdir(parents=True, exist_ok=True)
 
 
-EXPORT_SUFFIXES = {".png", ".pdf"}         # the images and the carousel (PDF); the text comes as post.txt
+EXPORT_SUFFIXES = {".png", ".pdf", ".pptx"}   # images, carousel or document (PDF), PowerPoint; the text comes as post.txt
 
 
 def export_root(project: config.Project | None = None, to: str | Path | None = None) -> Path | None:
@@ -501,7 +501,7 @@ def export_root(project: config.Project | None = None, to: str | Path | None = N
 def export(piece_id: str, project: config.Project | None = None, *, to: str | Path | None = None) -> dict:
     """Save a piece to the folder where it is kept (for a LinkedIn desk e.g.
     U:/Marketing/LinkedIn/20261120_slug): the post text as post.txt, and of the newest render of every
-    template the images (PNG) and the carousel or document (PDF). Where: see `export_root`, in a folder
+    template the images (PNG), the carousel or document (PDF) and a PowerPoint file (PPTX). Where: see `export_root`, in a folder
     named after `export.name` (default "{date}_{slug}"). Nothing is posted; the export is a copy."""
     import json
     from . import render
@@ -576,10 +576,14 @@ def summary(project: config.Project | None = None) -> list[dict]:
     for card in load(p):
         f = folder(p, card["id"])
         rs = []
+        sources = [x for x in (f / "text.md", *f.glob("*.yaml"), *(f / "style").glob("*")) if x.is_file() and x.name != "piece.yaml"]
         for m in render.renders(f / "render"):
             rel = Path(m["folder"]).relative_to(p.root).as_posix()
+            made = (Path(m["folder"]) / "render.json").stat().st_mtime if (Path(m["folder"]) / "render.json").exists() else 0
             rs.append({"template": m["template"], "kind": m["kind"], "design": m["design"], "at": m["at"], "notes": m.get("notes") or [],
-                       "files": [f"{rel}/{x}" for x in m["files"]], "stale": render.stale(m, results.load(p))})
+                       "files": [f"{rel}/{x}" for x in m["files"]], "stale": render.stale(m, results.load(p)),
+                       # text.md, slides.yaml or the piece's style written after this render: it shows an older version
+                       "changed_since": sorted(x.relative_to(f).as_posix() for x in sources if x.stat().st_mtime > made + 1)})
         files = sorted(x for x in f.glob("*.yaml") if x.name != "piece.yaml")
         out.append({**card, "text": read_text(card["id"], p), "data_files": [x.name for x in files],
                     # the content too (small files: a deck is a few kB), so the web view and its agents see what a slide says

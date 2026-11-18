@@ -660,6 +660,8 @@ export interface PieceRender {
   stale: string[];
   /** What the renderer adjusted or could not do (a label moved, a typeface missing). */
   notes?: string[];
+  /** Files of the piece written after this render (text.md, slides.yaml, style/…): the render shows an older version. */
+  changed_since?: string[];
 }
 
 export interface Piece {

@@ -1393,9 +1393,15 @@ def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tm
     # a renderer's helper images in a subfolder (a PowerPoint render's charts/) are not slides
     (Path(m["folder"]) / "charts").mkdir()
     (Path(m["folder"]) / "charts" / "deck_s2_chart.png").write_bytes(b"png")
-    manifest.write_text(saved.replace('"files": [', '"files": ["charts/deck_s2_chart.png", '), encoding="utf-8")
-    assert pieces.export("20261118-etf-kosten", p)["files"] == ["post.txt"]
+    (Path(m["folder"]) / "deck.pptx").write_bytes(b"pptx")                 # the PowerPoint file itself is saved
+    manifest.write_text(saved.replace('"files": [', '"files": ["charts/deck_s2_chart.png", "deck.pptx", '), encoding="utf-8")
+    assert pieces.export("20261118-etf-kosten", p)["files"] == ["post.txt", "deck.pptx"]
     manifest.write_text(saved, encoding="utf-8")
+    # text.md written after the render: the summary says the render shows an older text
+    import os, time
+    later = time.time() + 5
+    os.utime(desk / "pieces" / "20261118-etf-kosten" / "text.md", (later, later))
+    assert pieces.summary(p)[0]["renders"][0]["changed_since"] == ["text.md"]
     assert (out / "post.txt").read_text(encoding="utf-8").startswith("Kosten sinken.")
     assert json.loads((out / pieces.MARKER).read_text(encoding="utf-8"))["piece"] == "20261118-etf-kosten"
     (out / "my notes.txt").write_text("kept", encoding="utf-8")       # the person's own file in the export

@@ -33,6 +33,8 @@ interface PreviewFile {
 const IMAGE = /\.(png|jpe?g|svg)$/i;
 const folderOf = (r: PieceRender) => r.files[0]?.split("/").slice(0, -1).join("/") ?? "";
 const fileOf = (r: PieceRender | undefined, test: (name: string) => boolean) => r?.files.find((f) => test(f.split("/").pop()!));
+/** Images lying directly in a render's folder: a subfolder holds a renderer's helpers (a PowerPoint render's charts/), not slides. */
+const imagesOf = (r: PieceRender | undefined) => (r ? r.files.filter((f) => IMAGE.test(f) && f.split("/").slice(0, -1).join("/") === folderOf(r)) : []);
 /** The render to preview: the chosen one, else one that describes itself, else plain text, else the newest. */
 const choose = (piece: Piece, wanted: string | null) =>
   piece.renders.find((r) => r.template === wanted) ?? piece.renders.find((r) => fileOf(r, (n) => n === "preview.json")) ?? piece.renders.find((r) => r.kind === "text") ?? piece.renders[0];
@@ -60,12 +62,16 @@ function PostPreviewPanel() {
   } catch {
     described = { warnings: ["preview.json of this render cannot be read."] };
   }
-  const body = described.text ?? text.data?.text?.trim() ?? plain(piece.text);
+  // The text is not part of the images: written after the render (text.md newer), the render's copy is old or
+  // empty. Then the current text is shown, with its markup, and a note says to render again.
+  const textChanged = Boolean(render?.changed_since?.includes("text.md"));
+  const rendered = (described.text ?? text.data?.text ?? "").trim();
+  const body = !textChanged && rendered ? rendered : plain(piece.text);
   // Images: the ones the render names, else every image of the chosen render, else of any render.
   const named = (described.slides ?? []).filter((s) => s.file).map((s): PreviewImage => ({ src: paths.raw(project, `${folderOf(render!)}/${s.file}`), alt: s.alt ?? s.file! }));
-  const found = (render?.files.filter((f) => IMAGE.test(f)) ?? []).concat(render && render.files.some((f) => IMAGE.test(f)) ? [] : piece.renders.flatMap((r) => r.files.filter((f) => IMAGE.test(f))));
+  const found = imagesOf(render).length ? imagesOf(render) : piece.renders.flatMap((r) => imagesOf(r));
   const images = named.length ? named : [...new Set(found)].sort().map((f): PreviewImage => ({ src: paths.raw(project, f), alt: f.split("/").pop()! }));
-  const fromDraft = !render || (!described.text && !text.data);
+  const fromDraft = !render || !rendered || textChanged;
   return (
     <div className="sb-panel">
       <div className="wb-toolhead">
@@ -83,7 +89,16 @@ function PostPreviewPanel() {
       </div>
       {fromDraft && (
         <p className="sb-notice" data-tone="warn">
-          {render ? "This render has no text file: the text below is the piece's source, with its markup." : "Not rendered yet: the text below is the piece's source. Render it (Piece panel, Output) to see numbers filled in and sources listed."}
+          {!render
+            ? "Not rendered yet: the text below is the piece's source. Render it (Piece panel, Output) to see numbers filled in and sources listed."
+            : textChanged
+              ? "The text changed after this render: below is the current text.md with its markup. Render again to see numbers filled in and sources listed."
+              : "This render holds no text: the text below is the piece's source, with its markup. Render again."}
+        </p>
+      )}
+      {render && (render.changed_since ?? []).some((f) => f !== "text.md") && (
+        <p className="sb-notice" data-tone="warn">
+          Changed after this render: {(render.changed_since ?? []).filter((f) => f !== "text.md").join(", ")}. The images show the older version: render again.
         </p>
       )}
       {render && render.stale.length > 0 && (
@@ -140,7 +155,8 @@ export const postPreviewTool = defineTool<State>({
       note: "A preview of a render. Nothing is posted from this app.",
       text: (text ?? plain(piece.text)).slice(0, 6000),
       characters: (text ?? plain(piece.text)).length,
-      images: piece.renders.flatMap((r) => r.files.filter((f) => IMAGE.test(f))),
+      images: imagesOf(render),
+      changed_since_render: render?.changed_since ?? [],
     };
   },
 });

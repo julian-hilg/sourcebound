@@ -400,7 +400,7 @@ export const commands: Command<Werkbank, any>[] = [
   },
   {
     id: "piece.export",
-    title: "Save a piece to a folder: post text, carousel PDF, slide images (sb piece export)",
+    title: "Save a piece to a folder: post text, carousel PDF, slide images, PowerPoint (sb piece export)",
     category: "Pieces",
     // Copies files to a folder outside the project (export.dir, e.g. a shared marketing folder). It never
     // deletes what it did not write, but it has no inverse: external. It posts nothing.

@@ -75,6 +75,11 @@ function SlidesPanel() {
           {message.text}
         </p>
       )}
+      {render && (render.changed_since ?? []).some((f) => f !== "text.md") && (
+        <p className="sb-notice" data-tone="warn">
+          Changed after this render: {(render.changed_since ?? []).filter((f) => f !== "text.md").join(", ")}. The slides show the older version: render again.
+        </p>
+      )}
       {render && render.stale.length > 0 && (
         <p className="sb-notice" data-tone="warn">
           Shows older values of {render.stale.slice(0, 5).join(", ")}: render again.
@@ -128,7 +133,7 @@ export const slidesTool = defineTool<State>({
       piece: piece.id,
       title: piece.title,
       template: render?.template ?? piece.template ?? null,
-      render: render ? { at: render.at, notes: render.notes ?? [], shows_older_values_of: render.stale, files: render.files } : null,
+      render: render ? { at: render.at, notes: render.notes ?? [], shows_older_values_of: render.stale, changed_since: render.changed_since ?? [], files: render.files } : null,
       slides: titles.map((title, i) => ({ n: i + 1, title })),
       selected: state.slide ? { n: state.slide, title: titles[state.slide - 1] ?? null } : null,
       slides_yaml: deck ? deck.slice(0, prefs.textCap) : null,

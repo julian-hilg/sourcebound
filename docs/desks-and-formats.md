@@ -147,7 +147,8 @@ person asks for it, `sb piece set ID --self-citation true` allows it for that pi
 
 `sb piece export ID` (in the web view: *Output*, *Save as…*) saves a piece where the person
 keeps such files, for example a shared marketing folder: the post text as `post.txt`, the
-carousel or document (PDF) and the images (PNG) of the newest render of every template. A render
+carousel or document (PDF), the images (PNG) and a PowerPoint file of the newest render of every
+template (not the helper files in a render's subfolders). A render
 that lists a file it does not hold (one being rewritten at that moment) saves nothing. The folder
 is set per desk, else for the machine (`[pieces] export_dir` in the user configuration):
 

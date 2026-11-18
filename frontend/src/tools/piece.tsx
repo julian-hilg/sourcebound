@@ -221,7 +221,7 @@ function PiecePanel() {
               className="wb-button"
               disabled={piece.renders.length === 0}
               aria-expanded={saveTo !== null}
-              title="Save the post text, the carousel (PDF) and the slide images (PNG) to a folder (sb piece export)"
+              title="Save the post text, the carousel (PDF), the slide images (PNG) and a PowerPoint render to a folder (sb piece export)"
               onClick={() => setSaveTo(saveTo === null ? exportTo : null)}
             >
               Save as…
@@ -242,7 +242,7 @@ function PiecePanel() {
                 </label>
                 <input id="piece-save-to" className="wb-input" value={saveTo} placeholder="U:/Marketing/LinkedIn" onChange={(e) => setSaveTo(e.target.value)} />
                 <div className="wb-hint">
-                  Writes {(saveTo.trim() || "…").replace(/[\\/]+$/, "")}/{exportName}: post.txt, the carousel PDF and the slide PNGs.
+                  Writes {(saveTo.trim() || "…").replace(/[\\/]+$/, "")}/{exportName}: post.txt, the carousel PDF, the slide PNGs and a PowerPoint file if one was rendered.
                   {saveTo.trim() === exportTo && exportTo ? " (the standard folder)" : ""} Saving again replaces only what an earlier save of this piece wrote.
                 </div>
               </div>

@@ -85,8 +85,8 @@ The user points at a file ("make a LinkedIn post about X.pdf") and then steers b
    `pieces/<id>/style/style.yaml` (only `scale`, `empty_warn_pct`). Never edit the registered
    template or the design for one piece; a change every piece needs is a template change, which
    the user asks for separately.
-5. When the user wants the files: `sb piece export ID` saves `post.txt`, the carousel PDF and the
-   slide PNGs to `export.dir` of the desk, else the machine's standard folder (a folder
+5. When the user wants the files: `sb piece export ID` saves `post.txt`, the carousel PDF, the
+   slide PNGs and a rendered PowerPoint to `export.dir` of the desk, else the machine's standard folder (a folder
    `YYYYMMDD_slug`; `--to FOLDER` for another). The web view's *Save as…* does the same. It posts
    nothing and never deletes what it did not write.
 
