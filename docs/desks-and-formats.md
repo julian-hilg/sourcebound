@@ -279,6 +279,17 @@ Helpers: `render.fill` (numbers in, citations formatted by a callback), `render.
 `render.source_line`, `render.cite_label`, `render.plain_text`. A renderer writes only below
 `out`; the core adds `render.json` with the values shown, so staleness can be detected later.
 
+A renderer that reads data files of a piece names them and describes their format:
+`api.renderer("slides", render, data=("slides",), guide=MARKDOWN)`. `sb template guide ID` prints
+the guide with the template's size, and agents in the web view read it with `piece.format`
+before they write the file with `piece.data`, so nobody guesses field names.
+
+A private plugin (an organisation's chart style, kept on a shared drive) does not have to be
+installed into the environment: `sb plugin add FOLDER` names the folder in the user
+configuration (`[plugins] paths`), and it is loaded from there. `uv sync` and `sb update`, which
+remove packages the environment does not list, leave it alone. `sb plugin remove FOLDER` takes
+it out again; `SB_PLUGIN_PATH` adds folders for one shell.
+
 ### Charts
 
 `sourcebound.charts` draws one chart block (`bars`, `columns`, `line`, `gantt`, `day`/`timeline`,

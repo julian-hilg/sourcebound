@@ -339,12 +339,22 @@ def cmd_template(a):
             if not a.id:
                 sys.exit("usage: sb template add FOLDER [--as ID]")
             print("registered", assets.add_template(a.id, a.as_id))
+        elif a.what == "guide":
+            if not a.id:
+                sys.exit("usage: sb template guide ID")
+            from . import render
+            g = render.template_format(a.id)
+            size = " x ".join(str(v) for v in g["size"].values())
+            print(f"{g['template']}: kind {g['kind']}, design {g['design'] or '-'}" + (f", {size} px" if size else ""))
+            print("a piece needs: text.md" + "".join(f", {x}" for x in g["data_files"]))
+            print()
+            print(g["guide"] or "(the renderer has no guide)")
         else:
             if not a.id or not a.kind:
                 sys.exit('usage: sb template new ID --kind KIND [--design ID] [--title "..."]')
             d = assets.new_template(a.id, a.kind, title=a.title or "", design_id=a.design)
             print(f"wrote a starting template of kind {a.kind}: {d}")
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, KeyError) as e:
         _fail(e)
 
 
@@ -372,9 +382,22 @@ def cmd_pack(a):
         _fail(e)
 
 
+def config_path():
+    from . import config
+    return config.user_config_path()
+
+
 def cmd_plugin(a):
     from . import plugins
-    reg = plugins.load()
+    if a.what in ("add", "remove"):
+        if not a.folder:
+            sys.exit(f"usage: sb plugin {a.what} FOLDER")
+        try:
+            now = plugins.add_folder(a.folder) if a.what == "add" else plugins.remove_folder(a.folder)
+        except (ValueError, OSError) as e:
+            _fail(e)
+        print(f"plugin folders ({config_path()}): " + (", ".join(now) or "none"))
+    reg = plugins.load(fresh=True)
     for p in reg.plugins:
         print(f"{p.name:<14} {p.package} {p.version}  " + (f"ERROR: {p.error}" if p.error else
               f"renders: {', '.join(p.renderers) or '-'}; commands: {', '.join(p.commands) or '-'}"
@@ -473,12 +496,14 @@ def add_parsers(sub) -> None:
     s.set_defaults(f=cmd_deliver)
     s = sub.add_parser("design"); s.add_argument("what", choices=["list", "show", "new"]); s.add_argument("id", nargs="?")
     s.add_argument("--name"); s.set_defaults(f=cmd_design)
-    s = sub.add_parser("template"); s.add_argument("what", choices=["list", "add", "new"]); s.add_argument("id", nargs="?")
+    s = sub.add_parser("template"); s.add_argument("what", choices=["list", "add", "new", "guide"]); s.add_argument("id", nargs="?")
     s.add_argument("--as", dest="as_id"); s.add_argument("--kind"); s.add_argument("--design"); s.add_argument("--title")
     s.set_defaults(f=cmd_template)
     s = sub.add_parser("pack"); s.add_argument("what", choices=["install", "export"]); s.add_argument("folder")
     s.add_argument("--design", action="append"); s.add_argument("--template", action="append"); s.set_defaults(f=cmd_pack)
-    s = sub.add_parser("plugin"); s.add_argument("what", choices=["list"], nargs="?", default="list"); s.set_defaults(f=cmd_plugin)
+    s = sub.add_parser("plugin", help="installed plugins; add/remove a plugin folder (a private plugin kept outside the environment)")
+    s.add_argument("what", choices=["list", "add", "remove"], nargs="?", default="list"); s.add_argument("folder", nargs="?")
+    s.set_defaults(f=cmd_plugin)
     s = sub.add_parser("job"); s.add_argument("what", choices=["list", "add", "run", "log", "schedule"]); s.add_argument("id", nargs="?")
     s.add_argument("--run"); s.add_argument("--every"); s.add_argument("--title"); s.add_argument("--table"); s.add_argument("--source")
     s.add_argument("--due", action="store_true"); s.set_defaults(f=cmd_job)

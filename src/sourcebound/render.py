@@ -340,6 +340,18 @@ def piece_style(doc: "Document") -> dict | None:
     return {"css": css, "settings": settings, "files": files} if files else None
 
 
+def template_format(template_id: str) -> dict:
+    """What a piece needs for this template: the data files its renderer reads (e.g. slides.yaml), their
+    format as the renderer's guide describes it, and the size. For `sb template guide` and the web view."""
+    tpl = assets.template(template_id)
+    r = plugins.load().renderers.get(tpl["kind"])
+    return {"template": template_id, "kind": tpl["kind"], "design": tpl.get("design") or "", "title": tpl.get("title") or "",
+            "renderer": r.title if r else None, "data_files": [f"{n}.yaml" for n in (r.data if r else ())],
+            "size": {k: tpl[k] for k in ("width", "height") if tpl.get(k)},
+            "text": "pieces/<id>/text.md: the post text ({{result:key}} for recorded numbers, [@W-0001] for sources)",
+            "guide": (r.guide if r else "") or ("" if r else f"no installed plugin renders kind {tpl['kind']}")}
+
+
 def render(target: str, template_id: str, *, design_id: str | None = None, project: config.Project | None = None) -> dict:
     """Render a piece or deliverable with a registered template; returns the manifest."""
     doc = document(target, project)

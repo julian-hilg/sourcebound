@@ -412,7 +412,20 @@ def piece(pid: str, body: dict) -> dict:
             raise ValueError(str(e))
     if op == "export":
         return {"export": pieces.export(piece_id, p)}
-    raise ValueError("op must be add, set, rm, restore, check, render or export")
+    if op == "data":                                 # a data file a template reads (slides.yaml); null removes it
+        name = str(body.get("name") or "")
+        text = body.get("text")
+        before = pieces.write_data(piece_id, name, None if text is None else str(text), p)
+        return {"name": name, "before": before}
+    if op == "format":                               # what the piece's template needs, and the format of its files
+        card = pieces.get(piece_id, p)
+        template = str(body.get("template") or card.get("template") or (p.meta.get("piece_defaults") or {}).get("template") or "")
+        if not template:
+            raise ValueError(f"{piece_id} has no template yet: set one (piece.update) or name it")
+        fmt = render.template_format(template)
+        fmt["current"] = {f: pieces.read_data(piece_id, f, p) for f in fmt["data_files"]}
+        return fmt
+    raise ValueError("op must be add, set, rm, restore, check, render, export, data or format")
 
 
 def lake_overview() -> dict:

@@ -40,10 +40,16 @@ def _run(a) -> None:
         sys.exit(str(e).strip("'\""))
 
 
+def guide() -> str:
+    """The format of `slides.yaml` (Markdown), as `sb template guide` and the web view's agents read it."""
+    from pathlib import Path
+    return (Path(__file__).parent / "guide.md").read_text(encoding="utf-8")
+
+
 def register(api) -> None:
     from . import slides
     api.renderer("slides", slides.render_slides, title="Slides and infoposts: PNG per slide and a carousel PDF, layout checked",
-                 outputs=(".html", ".png", ".pdf"))
+                 outputs=(".html", ".png", ".pdf"), data=("slides",), guide=guide())
     api.check("slides", slides.check)
     api.scaffold("slides", slides.scaffold)
     api.command("linkedin", _setup, _run, help="what a LinkedIn post needs: checks, and a bundle to post by hand")

@@ -372,6 +372,45 @@ def check(piece_id: str, project: config.Project | None = None) -> tuple[list[st
     return f["errors"], f["warnings"]
 
 
+# ------------------------------------------------------------------ data files: structured content a template reads
+DATA_NAME = re.compile(r"[a-z][a-z0-9_-]{0,40}")
+
+
+def read_data(piece_id: str, name: str, project: config.Project | None = None) -> str | None:
+    p = project or config.project()
+    f = folder(p, piece_id) / f"{_data_name(name)}.yaml"
+    return f.read_text(encoding="utf-8") if f.exists() else None
+
+
+def _data_name(name: str) -> str:
+    name = name.removesuffix(".yaml")
+    if not DATA_NAME.fullmatch(name) or name == "piece":
+        raise ValueError(f"data file name {name!r}: lowercase letters, digits, - and _ (e.g. slides); piece.yaml is the card")
+    return name
+
+
+def write_data(piece_id: str, name: str, text: str | None, project: config.Project | None = None) -> str | None:
+    """Write `pieces/<id>/<name>.yaml` (structured content a template reads, e.g. slides.yaml), or remove it
+    with None. The text must be YAML holding a mapping. Returns what was there before (None: nothing), so
+    the change can be undone."""
+    p = project or config.project()
+    get(piece_id, p)
+    f = folder(p, piece_id) / f"{_data_name(name)}.yaml"
+    before = f.read_text(encoding="utf-8") if f.exists() else None
+    if text is None:
+        if f.exists():
+            f.unlink()
+        return before
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{f.name} is not valid YAML: {e}")
+    if not isinstance(data, dict):
+        raise ValueError(f"{f.name} must hold a mapping (e.g. deck: and slides: for a slides template)")
+    config.write_atomic(f, text if text.endswith("\n") else text + "\n")
+    return before
+
+
 # ------------------------------------------------------------------ focus: the piece the web view should show
 def focus_path() -> Path | None:
     h = config.hub(required=False)

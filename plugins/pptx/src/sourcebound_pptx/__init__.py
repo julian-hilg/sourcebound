@@ -8,9 +8,14 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 
+def _guide() -> str:
+    from sourcebound_linkedin import guide         # the same deck format as the slides renderer
+    return guide() + "\nIn PowerPoint, text stays editable and charts are images; a kpi number that is too wide shrinks to 60 %.\n"
+
+
 def register(api) -> None:
     from . import scaffold, slides
     api.renderer("pptx", slides.render_pptx, title="PowerPoint: one slide per deck slide in a master, editable text, charts as images",
-                 outputs=(".pptx", ".png"))
+                 outputs=(".pptx", ".png"), data=("slides",), guide=_guide())
     api.check("pptx", slides.check)
     api.scaffold("pptx", scaffold.scaffold)

@@ -298,6 +298,44 @@ export const commands: Command<Werkbank, any>[] = [
     },
   },
   {
+    id: "piece.format",
+    title: "What a piece's template needs, and the format of its files",
+    category: "Pieces",
+    risk: "read",
+    palette: false,
+    input: z.object({
+      project,
+      id: z.string().min(1),
+      template: z.string().max(60).describe("Default: the piece's template, else the project's piece_defaults").optional(),
+    }),
+    run: async (_ctx, i: { project: string; id: string; template?: string }) =>
+      api.post<{ template: string; kind: string; data_files: string[]; guide: string; current: Record<string, string | null> }>(paths.pieces(i.project), { op: "format", id: i.id, template: i.template }),
+  },
+  {
+    id: "piece.data",
+    title: "Write a data file of a piece (e.g. slides.yaml)",
+    category: "Pieces",
+    // Structured content a template reads, beside text.md. Validated as YAML holding a mapping; the render
+    // checks the rest (fields, sizes, sources). Undo puts back what was there.
+    risk: "local",
+    palette: false,
+    input: z.object({
+      project,
+      id: z.string().min(1),
+      name: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/).describe('The file without ".yaml", e.g. "slides" (piece.format lists what the template reads)'),
+      text: z.string().max(200_000).describe("The whole file as YAML, in the format piece.format returns"),
+    }),
+    run: async (_ctx, i: { project: string; id: string; name: string; text: string }) => {
+      const answer = await api.post<{ name: string; before: string | null }>(paths.pieces(i.project), { op: "data", id: i.id, name: i.name, text: i.text });
+      void api.refresh(paths.pieces(i.project));
+      return answer;
+    },
+    undo: (_ctx, i: { project: string; id: string; name: string }, answer) =>
+      void api
+        .post(paths.pieces(i.project), { op: "data", id: i.id, name: i.name, text: (answer as { before: string | null }).before })
+        .then(() => api.refresh(paths.pieces(i.project))),
+  },
+  {
     id: "piece.decide",
     title: "Approve, schedule or mark a piece as published",
     category: "Pieces",

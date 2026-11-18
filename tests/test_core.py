@@ -1403,6 +1403,64 @@ def test_a_post_cites_the_original_sources_not_the_desks_own_work(desk, tmp_path
     assert pieces.check("d1", config.project())[0] == []
 
 
+def test_an_agent_in_the_web_view_writes_a_pieces_data_file_from_the_format_guide(desk):
+    from sourcebound import config, pieces, plugins, render, ui
+    from sourcebound.cli import main
+    main(["piece", "add", "Kurz", "--id", "k1", "--template", "text"])
+    p = config.project()
+    reg = plugins.load()
+    reg.renderers["text"].data, reg.renderers["text"].guide = ("slides",), "# The deck\n\ndeck: and slides:"
+    try:
+        fmt = ui.piece(p.slug, {"op": "format", "id": "k1"})
+        assert fmt["data_files"] == ["slides.yaml"] and fmt["guide"].startswith("# The deck") and fmt["current"] == {"slides.yaml": None}
+        assert render.template_format("text")["kind"] == "text"
+    finally:
+        reg.renderers["text"].data, reg.renderers["text"].guide = (), ""
+    assert ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": "deck: {title: A}\nslides: []\n"})["before"] is None
+    assert pieces.read_data("k1", "slides", p) == "deck: {title: A}\nslides: []\n"
+    with pytest.raises(ValueError, match="not valid YAML"):
+        ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": "deck: [unclosed"})
+    with pytest.raises(ValueError, match="must hold a mapping"):
+        ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": "- a\n- b\n"})
+    with pytest.raises(ValueError, match="piece.yaml is the card"):
+        pieces.write_data("k1", "piece", "a: 1\n", p)
+    with pytest.raises(ValueError, match="data file name"):
+        pieces.write_data("k1", "../x", "a: 1\n", p)
+    # undo: what was there goes back; nothing there: the file goes
+    before = ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": "deck: {title: B}\n"})["before"]
+    ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": before})
+    assert "title: A" in pieces.read_data("k1", "slides", p)
+    ui.piece(p.slug, {"op": "data", "id": "k1", "name": "slides", "text": None})
+    assert pieces.read_data("k1", "slides", p) is None
+
+
+def test_a_private_plugin_is_loaded_from_its_folder_and_survives_a_sync(tmp_path, monkeypatch, capsys):
+    from sourcebound import config, plugins
+    from sourcebound.cli import main
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    monkeypatch.delenv(plugins.PATH_ENV, raising=False)
+    folder = tmp_path / "shared drive" / "firm-plugin"
+    (folder / "src" / "firm_charts").mkdir(parents=True)
+    (folder / "pyproject.toml").write_text('[project]\nname = "firm-charts"\nversion = "0.2.0"\n\n'
+                                           '[project.entry-points."sourcebound.plugins"]\nfirm = "firm_charts:register"\n', encoding="utf-8")
+    (folder / "src" / "firm_charts" / "__init__.py").write_text(
+        "def register(api):\n    api.chart_renderer('firm', lambda block, **kw: None, title='Firm charts')\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(["plugin", "add", str(tmp_path)])                          # not a plugin folder: refused, nothing written
+    assert not config.user_config_path().exists()
+    main(["plugin", "add", str(folder)])
+    assert "firm" in capsys.readouterr().out
+    reg = plugins.load(fresh=True)
+    p = next(x for x in reg.plugins if x.name == "firm")
+    assert p.error is None and p.version == "0.2.0" and "folder" in p.package and "firm" in reg.chart_renderers
+    main(["plugin", "add", str(folder)])                                 # twice: listed once
+    assert plugins.folders() == [folder.absolute()]
+    text = config.user_config_path().read_text(encoding="utf-8")
+    assert text.count("[plugins]") == 1
+    main(["plugin", "remove", str(folder)])
+    assert plugins.folders() == [] and "firm" not in plugins.load(fresh=True).chart_renderers
+
+
 def test_a_piece_adjusts_its_own_style_within_the_design(desk):
     from sourcebound import config, render
     from sourcebound.cli import main

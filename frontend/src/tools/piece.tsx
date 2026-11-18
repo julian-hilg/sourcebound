@@ -275,7 +275,7 @@ export const pieceTool = defineTool<State>({
     return {
       project,
       view: state.view,
-      note: "The saved piece. Change it with piece.update { project, id, patch: { text, title, … } }. Notation in the text: {{result:key}} for a recorded number, [@W-0001] or [@citekey] for a source.",
+      note: "The saved piece. Change it with piece.update { project, id, patch: { text, title, … } }. Notation in the text: {{result:key}} for a recorded number, [@W-0001] or [@citekey] for a source. A template that reads a data file (slides.yaml for slides and PowerPoint): piece.format { project, id } returns its exact format and the current content; write the whole file with piece.data { project, id, name, text }.",
       piece: pieceCard(piece, prefs.textCap),
       unsaved_changes_in_this_panel: draft ? changed(piece, draft) : [],
     };
