@@ -21,6 +21,7 @@ Python 3.12 through [uv](https://docs.astral.sh/uv/). Windows: `uv sync`, `uv ru
 | `src/sourcebound` | `sourcebound` | the core and the `sb` command; no dependency on a plugin or the frontend |
 | `plugins/word` | `sourcebound-word` | python-docx; installed by `uv sync --extra word` |
 | `plugins/linkedin` | `sourcebound-linkedin` | Jinja2; a Chromium on the machine for PNG and PDF |
+| `plugins/pptx` | `sourcebound-pptx` | python-pptx; uses the deck format of `sourcebound-linkedin` |
 | `frontend/` | the web view | TypeScript and React on Werkbank; its own `AGENTS.md` |
 
 ## Commands
