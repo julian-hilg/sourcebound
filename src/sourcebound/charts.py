@@ -206,8 +206,8 @@ def font_file(name: str, *, weight: int = 400, design: dict | None = None) -> Pa
     """The file of the font a document names (as Office or a browser would ask for it), or None.
 
     The design's own font files are searched first, then the machine's fonts. A file matches
-    when its family, full or PostScript name is `name` (case does not matter, spaces do: "DIN Pro"
-    is not "DINPro"); of several, the upright one nearest to `weight` wins.
+    when its family, full or PostScript name is `name` (case does not matter, spaces do: "Example Sans"
+    is not "ExampleSans"); of several, the upright one nearest to `weight` wins.
     """
     want = name.strip().lower()
     for pool in ([str(p) for p in design_font_files(design or {})], _system_fonts()):
