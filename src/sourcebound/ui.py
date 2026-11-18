@@ -380,9 +380,9 @@ def pieces_of(pid: str) -> dict:
     from . import assets, pieces
     p = _project(pid)
     preview = p.meta.get("preview") if isinstance(p.meta.get("preview"), dict) else {}
-    export = p.meta.get("export") if isinstance(p.meta.get("export"), dict) else {}
+    root = pieces.export_root(p)
     return {"project": pid, "statuses": pieces.STATUS, "defaults": p.meta.get("piece_defaults") or {},
-            "export_dir": str(export.get("dir") or "") or None,
+            "export_dir": str(root) if root else None,
             "preview": {k: str(preview[k]) for k in ("author", "headline") if preview.get(k)},
             "pieces": pieces.summary(p),
             "templates": [t for t in assets.templates() if not t["for"] or "piece" in t["for"]]}
@@ -410,8 +410,8 @@ def piece(pid: str, body: dict) -> dict:
             return {"render": render.render(piece_id, str(body.get("template") or ""), design_id=body.get("design") or None, project=p)}
         except (RuntimeError, FileNotFoundError) as e:
             raise ValueError(str(e))
-    if op == "export":
-        return {"export": pieces.export(piece_id, p)}
+    if op == "export":                               # "Save as": the folder the person chose, else the standard one
+        return {"export": pieces.export(piece_id, p, to=str(body.get("to") or "").strip() or None)}
     if op == "data":                                 # a data file a template reads (slides.yaml); null removes it
         name = str(body.get("name") or "")
         text = body.get("text")

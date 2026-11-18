@@ -539,6 +539,14 @@ def test_manual_file_and_database_extract(hub, tmp_path, capsys):
         sources.query("warehouse", q)
 
 
+def test_a_windows_sqlite_uri_is_written_as_connectorx_reads_it():
+    from sourcebound.databases import sqlite_uri
+    assert sqlite_uri("sqlite://C:\\data\\x.sqlite") == "sqlite:///C:/data/x.sqlite"
+    assert sqlite_uri("sqlite:///C:/data/x.sqlite") == "sqlite:///C:/data/x.sqlite"
+    assert sqlite_uri("sqlite:///tmp/x.sqlite") == "sqlite:///tmp/x.sqlite"                # a POSIX path stays as it is
+    assert sqlite_uri("mssql://u:p@host:1433/db") == "mssql://u:p@host:1433/db"
+
+
 def test_database_by_uri_from_environment(hub, tmp_path, monkeypatch):
     pytest.importorskip("connectorx")                                         # optional: uv sync --extra sql
     import sqlite3
@@ -1349,7 +1357,7 @@ def test_a_piece_from_a_local_document_to_rendered_text(desk, tmp_path, capsys):
         render.render("p1", "deck", project=p)
 
 
-def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tmp_path, capsys):
+def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tmp_path, capsys, monkeypatch):
     import json
     from sourcebound import config, pieces, render
     from sourcebound.cli import main
@@ -1360,17 +1368,30 @@ def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tm
     with pytest.raises(ValueError, match="no render yet"):
         pieces.export("20261118-etf-kosten", p, to=tmp_path)
     render.render("20261118-etf-kosten", "text", project=p)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))      # no standard folder on this "machine"
     with pytest.raises(ValueError, match="no export folder"):
         pieces.export("20261118-etf-kosten", p)
     marketing = tmp_path / "Marketing" / "LinkedIn"
     (marketing / "KnowTheFlow").mkdir(parents=True)
     (marketing / "KnowTheFlow" / "KtF.PNG").write_bytes(b"x")
+    # the machine's standard folder ([pieces] export_dir of the user configuration)
+    (tmp_path / "cfg" / "sourcebound").mkdir(parents=True)
+    (tmp_path / "cfg" / "sourcebound" / "config.toml").write_text(f'[pieces]\nexport_dir = "{marketing.as_posix()}"\n', encoding="utf-8")
+    assert pieces.export_root(p) == marketing
     (desk / "project.yaml").write_text((desk / "project.yaml").read_text(encoding="utf-8")
                                        + f'\nexport:\n  dir: "{marketing.as_posix()}"\n', encoding="utf-8")
     p = config.project()
     r = pieces.export("20261118-etf-kosten", p)
     out = marketing / "20261120_etf_kosten"                         # the planned posting day, the id without its date
-    assert r["folder"] == str(out) and r["files"] == ["20261118-etf-kosten.txt"]
+    assert r["folder"] == str(out) and r["files"] == ["post.txt"]           # a text piece: only its text
+    m = render.renders(desk / "pieces" / "20261118-etf-kosten" / "render")[0]
+    manifest = Path(m["folder"]) / "render.json"
+    saved = manifest.read_text(encoding="utf-8")
+    manifest.write_text(saved.replace('"files": [', '"files": ["gone_slide_1.png", '), encoding="utf-8")
+    with pytest.raises(ValueError, match="the render is incomplete"):             # a render being rewritten: nothing saved
+        pieces.export("20261118-etf-kosten", p)
+    manifest.write_text(saved, encoding="utf-8")
+    assert (out / "post.txt").read_text(encoding="utf-8").startswith("Kosten sinken.")
     assert json.loads((out / pieces.MARKER).read_text(encoding="utf-8"))["piece"] == "20261118-etf-kosten"
     (out / "my notes.txt").write_text("kept", encoding="utf-8")       # the person's own file in the export
     main(["piece", "export", "20261118-etf-kosten"])                  # again: replaces only what it wrote

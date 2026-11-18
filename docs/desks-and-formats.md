@@ -145,9 +145,11 @@ person asks for it, `sb piece set ID --self-citation true` allows it for that pi
 
 ### Export to a folder
 
-`sb piece export ID` copies a piece to where the person keeps such files, for example a shared
-marketing folder: the newest render of every template (images, PDF, Word, PowerPoint), the post
-text as `post.txt` and the alternative texts. The folder is set per desk:
+`sb piece export ID` (in the web view: *Output*, *Save as…*) saves a piece where the person
+keeps such files, for example a shared marketing folder: the post text as `post.txt`, the
+carousel or document (PDF) and the images (PNG) of the newest render of every template. A render
+that lists a file it does not hold (one being rewritten at that moment) saves nothing. The folder
+is set per desk, else for the machine (`[pieces] export_dir` in the user configuration):
 
 ```yaml
 export:
@@ -155,10 +157,15 @@ export:
   name: "{date}_{slug}"            # {date}: planned posting day, else today (YYYYMMDD); {slug}; {id}
 ```
 
-`--to FOLDER` exports into another folder. An export writes `.sourcebound-export.json` with the
+```toml
+# ~/.config/sourcebound/config.toml: the standard folder of this machine
+[pieces]
+export_dir = "U:/Marketing/LinkedIn"
+```
+
+`--to FOLDER` (or another folder typed under *Save as…*) saves elsewhere. An export writes `.sourcebound-export.json` with the
 files it wrote; exporting again replaces only those. A folder that an export of this piece did
-not write is refused, so an export never deletes anything else. The web view has the same
-action (*Output*, *Export to folder*).
+not write is refused, so an export never deletes anything else. 
 
 ### One piece's own look
 

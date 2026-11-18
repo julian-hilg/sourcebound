@@ -818,3 +818,11 @@ input.sb-grow {
   border: 0;
   background: var(--wb-canvas-alt);
 }
+
+.sb-saveas {
+  margin: 4px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-grid);
+  border-radius: var(--wb-radius);
+  background: var(--wb-canvas-alt);
+}

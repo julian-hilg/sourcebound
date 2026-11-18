@@ -400,15 +400,19 @@ export const commands: Command<Werkbank, any>[] = [
   },
   {
     id: "piece.export",
-    title: "Export a piece to its folder (sb piece export)",
+    title: "Save a piece to a folder: post text, carousel PDF, slide images (sb piece export)",
     category: "Pieces",
     // Copies files to a folder outside the project (export.dir, e.g. a shared marketing folder). It never
     // deletes what it did not write, but it has no inverse: external. It posts nothing.
     risk: "external",
     palette: false,
-    input: z.object({ project, id: z.string().min(1) }),
-    run: async (_ctx, i: { project: string; id: string }) => {
-      const { export: done } = await api.post<{ export: { folder: string; files: string[] } }>(paths.pieces(i.project), { op: "export", id: i.id });
+    input: z.object({
+      project,
+      id: z.string().min(1),
+      to: z.string().max(400).describe("The folder to save into; default: export.dir of the project, else the standard folder of this machine").optional(),
+    }),
+    run: async (_ctx, i: { project: string; id: string; to?: string }) => {
+      const { export: done } = await api.post<{ export: { folder: string; files: string[] } }>(paths.pieces(i.project), { op: "export", id: i.id, to: i.to });
       return done;
     },
   },

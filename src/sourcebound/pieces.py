@@ -16,6 +16,7 @@ typed confirmation, and nothing in Sourcebound posts by itself.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from datetime import date, datetime
@@ -475,21 +476,42 @@ def prepare_export(dest: Path, piece_id: str) -> None:
     dest.mkdir(parents=True, exist_ok=True)
 
 
+EXPORT_SUFFIXES = {".png", ".pdf"}         # the images and the carousel (PDF); the text comes as post.txt
+
+
+def export_root(project: config.Project | None = None, to: str | Path | None = None) -> Path | None:
+    """Where exports go: `to`, else `export.dir` in project.yaml, else `[pieces] export_dir` in the user
+    configuration (the machine's standard folder, e.g. a shared marketing folder); None without any."""
+    import tomllib
+    p = project or config.project()
+    conf = p.meta.get("export") if isinstance(p.meta.get("export"), dict) else {}
+    value = str(to or conf.get("dir") or "")
+    if not value:
+        u = config.user_config_path()
+        try:
+            value = str(((tomllib.loads(u.read_text(encoding="utf-8")).get("pieces") or {}).get("export_dir")) or "") if u.exists() else ""
+        except (OSError, tomllib.TOMLDecodeError):
+            value = ""
+    if not value:
+        return None
+    root = Path(value).expanduser()
+    return root if root.is_absolute() else (p.root / root).resolve()
+
+
 def export(piece_id: str, project: config.Project | None = None, *, to: str | Path | None = None) -> dict:
-    """Copy what a piece is made of to the folder where it is kept (for a LinkedIn desk e.g.
-    U:/Marketing/LinkedIn/20261120_slug): the newest render of every template, the post text and the
-    alternative texts. Where: `to`, else `export.dir` in project.yaml, in a folder named after
-    `export.name` (default "{date}_{slug}"). Nothing is posted; the export is a copy."""
+    """Save a piece to the folder where it is kept (for a LinkedIn desk e.g.
+    U:/Marketing/LinkedIn/20261120_slug): the post text as post.txt, and of the newest render of every
+    template the images (PNG) and the carousel or document (PDF). Where: see `export_root`, in a folder
+    named after `export.name` (default "{date}_{slug}"). Nothing is posted; the export is a copy."""
     import json
     from . import render
     p = project or config.project()
     meta = get(piece_id, p)
     conf = p.meta.get("export") if isinstance(p.meta.get("export"), dict) else {}
-    root = Path(str(to or conf.get("dir") or "")).expanduser() if (to or conf.get("dir")) else None
+    root = export_root(p, to)
     if root is None:
-        raise ValueError("no export folder: give one (sb piece export ID --to FOLDER) or set export.dir in project.yaml")
-    if not root.is_absolute():
-        root = (p.root / root).resolve()
+        raise ValueError("no export folder: give one (sb piece export ID --to FOLDER), set export.dir in project.yaml, "
+                         "or export_dir under [pieces] in the user configuration")
     if not root.is_dir():
         raise ValueError(f"the export folder {root} does not exist (is the drive connected?)")
     dest = root / export_name(piece_id, meta, str(conf.get("name") or "{date}_{slug}"))
@@ -499,28 +521,49 @@ def export(piece_id: str, project: config.Project | None = None, *, to: str | Pa
             newest[m["template"]] = m
     if not newest:
         raise ValueError(f"{piece_id} has no render yet: sb render {piece_id} --template ID")
+    # a render that lists a file it does not hold is incomplete (or being rewritten right now): save nothing
+    missing = [f"{m['template']}/{n}" for m in newest.values() for n in m.get("files") or []
+               if Path(n).suffix.lower() in EXPORT_SUFFIXES and not (Path(m["folder"]) / n).is_file()]
+    if missing:
+        raise ValueError(f"the render is incomplete ({', '.join(missing[:3])} missing; is it being rendered right now?): "
+                         f"render again, then save; nothing was saved")
     prepare_export(dest, piece_id)
     written: list[str] = []
-    for m in newest.values():
+    text: str | None = None
+    for m in sorted(newest.values(), key=lambda m: m["at"], reverse=True):
         src = Path(m["folder"])
         for name in m.get("files") or []:
             f = src / name
-            if f.is_file() and f.suffix.lower() not in {".json", ".html"} and name not in written:
-                shutil.copy2(f, dest / Path(name).name)
-                written.append(Path(name).name)
+            if f.is_file() and f.suffix.lower() in EXPORT_SUFFIXES and f.name not in written:
+                shutil.copy2(f, dest / f.name)
+                written.append(f.name)
         pv = src / "preview.json"
-        if pv.exists() and "post.txt" not in written:
-            view = json.loads(pv.read_text(encoding="utf-8"))
-            (dest / "post.txt").write_text(view.get("text", ""), encoding="utf-8")
-            alts = [f"{s['file']}\n{s['alt']}" for s in view.get("slides", []) if s.get("file") and s.get("alt")]
-            written.append("post.txt")
-            if alts:
-                (dest / "alt-texts.txt").write_text("\n\n".join(alts) + "\n", encoding="utf-8")
-                written.append("alt-texts.txt")
+        if text is None and pv.exists():             # a post: the text as the feed shows it, numbers and sources filled in
+            text = json.loads(pv.read_text(encoding="utf-8")).get("text") or None
+        if text is None and m.get("kind") == "text":  # a text render: its file is the post text
+            txt = next((src / n for n in m.get("files") or [] if n.endswith(".txt")), None)
+            text = txt.read_text(encoding="utf-8") if txt and txt.is_file() else None
+    if text is not None:
+        (dest / "post.txt").write_text(text, encoding="utf-8")
+        written.insert(0, "post.txt")
     stamp = {"piece": piece_id, "project": p.slug, "at": datetime.now().astimezone().isoformat(timespec="seconds"),
              "renders": {t: m["at"] for t, m in newest.items()}, "files": written}
-    (dest / MARKER).write_text(json.dumps(stamp, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    marker = dest / MARKER
+    if marker.exists() and os.name == "nt":          # a hidden file cannot be overwritten in place on Windows
+        marker.unlink()
+    marker.write_text(json.dumps(stamp, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    _hide(marker)
     return {"folder": str(dest), "files": written, "renders": sorted(newest)}
+
+
+def _hide(f: Path) -> None:
+    """The export's bookkeeping file stays out of sight in Explorer (on other systems the dot hides it)."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetFileAttributesW(str(f), 0x02)        # FILE_ATTRIBUTE_HIDDEN
+        except (AttributeError, OSError):
+            pass
 
 
 def summary(project: config.Project | None = None) -> list[dict]:

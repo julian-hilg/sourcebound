@@ -40,6 +40,8 @@ function PiecePanel() {
   const [confirmDelete] = useSetting<boolean>("confirm.delete");
   const [check, setCheck] = useState<PieceCheck | null>(null);
   const [message, setMessage] = useState<{ tone?: "bad"; text: string } | null>(null);
+  /** "Save as": the folder being typed (null: the form is closed). Not kept across reloads: it is one action. */
+  const [saveTo, setSaveTo] = useState<string | null>(null);
   if (!data || !project) return <EmptyState>{error ?? "Loading…"}</EmptyState>;
   const piece = pickPiece(data, linked);
   if (!piece) return <EmptyState>No piece selected. Add one in the Pieces panel.</EmptyState>;
@@ -69,11 +71,17 @@ function PiecePanel() {
   };
   const template = state.renderWith || piece.template || data.templates[0]?.id || "";
   const render = async () => say(await wb.run("piece.render", { project, id: piece.id, template }), `Rendered with ${template}.`);
-  const exportTo = data.export_dir;
-  const exportFiles = async () => {
-    const result = await wb.run("piece.export", { project, id: piece.id });
-    if (result.ok) setMessage({ text: `Exported to ${(result.value as { folder: string }).folder}. Nothing was posted.` });
-    else setMessage({ tone: "bad", text: result.error });
+  const exportTo = data.export_dir ?? "";
+  // The folder a save writes, as `sb piece export` names it: planned posting day (else today) and the id without its date.
+  const day = (piece.scheduled_at ?? "").slice(0, 10).replaceAll("-", "") || new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const exportName = `${day}_${piece.id.replace(/^\d{8}-/, "").replaceAll("-", "_")}`;
+  const saveAs = async () => {
+    const result = await wb.run("piece.export", { project, id: piece.id, to: (saveTo ?? exportTo).trim() || undefined });
+    if (result.ok) {
+      const done = result.value as { folder: string; files: string[] };
+      setMessage({ text: `Saved to ${done.folder}: ${done.files.join(", ")}. Nothing was posted.` });
+      setSaveTo(null);
+    } else setMessage({ tone: "bad", text: result.error });
   };
   const decide = async (status: "approved" | "scheduled" | "published", extra: object = {}) => say(await wb.run("piece.decide", { project, id: piece.id, status, ...extra }), status === "scheduled" ? "Scheduled." : status === "approved" ? "Approved." : "Marked as published.");
   const slot = state.when.trim();
@@ -211,13 +219,43 @@ function PiecePanel() {
             <span className="sb-grow" />
             <button
               className="wb-button"
-              disabled={!exportTo || piece.renders.length === 0}
-              title={exportTo ? `Copies the newest render of every template, the post text and the alt texts to ${exportTo} (sb piece export)` : "Set export.dir in project.yaml to export (e.g. a shared marketing folder)"}
-              onClick={() => void exportFiles()}
+              disabled={piece.renders.length === 0}
+              aria-expanded={saveTo !== null}
+              title="Save the post text, the carousel (PDF) and the slide images (PNG) to a folder (sb piece export)"
+              onClick={() => setSaveTo(saveTo === null ? exportTo : null)}
             >
-              Export to folder
+              Save as…
             </button>
           </p>
+          {saveTo !== null && (
+            <form
+              className="wb-form sb-saveas"
+              aria-label="Save as"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveAs();
+              }}
+            >
+              <div className="wb-form-row">
+                <label className="wb-control-label" htmlFor="piece-save-to">
+                  Folder
+                </label>
+                <input id="piece-save-to" className="wb-input" value={saveTo} placeholder="U:/Marketing/LinkedIn" onChange={(e) => setSaveTo(e.target.value)} />
+                <div className="wb-hint">
+                  Writes {(saveTo.trim() || "…").replace(/[\\/]+$/, "")}/{exportName}: post.txt, the carousel PDF and the slide PNGs.
+                  {saveTo.trim() === exportTo && exportTo ? " (the standard folder)" : ""} Saving again replaces only what an earlier save of this piece wrote.
+                </div>
+              </div>
+              <div className="wb-form-actions">
+                <button type="submit" className="wb-button" disabled={!saveTo.trim()}>
+                  Save
+                </button>
+                <button type="button" className="wb-button" onClick={() => setSaveTo(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
           {piece.renders.length === 0 && <p className="wb-hint">Not rendered yet. A render turns the text into a format: plain text for a post, Markdown, and whatever the installed plugins offer (Word, slides).</p>}
           {piece.renders.map((r) => (
             <Section key={r.template} title={r.template} aside={<span className="wb-dim">{r.kind} · design {r.design} · {when(r.at)}</span>}>

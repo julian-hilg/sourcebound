@@ -259,11 +259,18 @@ def read(source: str, query: str):
                              "in its register entry)")
         if not os.environ.get(env):
             raise RuntimeError(f"set the environment variable {env} to the database URI of {source}, then start `sb ui` again")
-        target = os.environ[env]
+        target = sqlite_uri(os.environ[env])
     try:
         return pl.read_database_uri(query, target)
     except ModuleNotFoundError as err:
         raise RuntimeError("reading SQL Server, PostgreSQL or MySQL needs connectorx: uv sync --extra sql") from err
+
+
+def sqlite_uri(uri: str) -> str:
+    """A SQLite URI as connectorx reads it: `sqlite:///C:/data/x.sqlite` on Windows. The form people write,
+    `sqlite://C:\\data\\x.sqlite`, would be read as host `C` and fail to open; other URIs pass unchanged."""
+    m = re.match(r"(?i)^sqlite:/{2,3}([A-Za-z]):[\\/](.*)$", uri)
+    return f"sqlite:///{m.group(1)}:/{m.group(2).replace(chr(92), '/')}" if m else uri
 
 
 def test(source: str, password_: str | None = None) -> dict:
