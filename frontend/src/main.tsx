@@ -9,6 +9,24 @@ import { werkbank } from "./app";
 import { api } from "./data/api";
 import { ServiceStatus } from "./ServiceStatus";
 
+// After `sb update` or a rebuild, a page that was open asks for the old build's parts, which are gone:
+// load the new build once instead of showing "failed to fetch dynamically imported module". The
+// workspace and settings are in the browser, so nothing is lost; a second failure within a minute
+// is shown as it is, so a broken build cannot reload forever.
+window.addEventListener("vite:preloadError", (event) => {
+  const key = "sb-reloaded-for-new-build";
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 60_000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // no session storage: reload anyway, once per page
+  }
+  event.preventDefault();
+  location.reload();
+});
+
 // Handles for poking at the app from the browser console.
 Object.assign(window, { werkbank, api });
 
