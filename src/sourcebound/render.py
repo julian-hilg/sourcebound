@@ -83,6 +83,7 @@ def bib_fields(text: str) -> dict[str, dict]:
             value, i = (g[0], g[1]) if g else (text_[f.end():].split(",")[0], f.end() + len(text_[f.end():].split(",")[0]))
             if f.group(1).lower() in {"author", "editor"}:      # {An Institution} is one name: keep it in one piece
                 value = re.sub(r"\{([^{}]*)\}", lambda g: g.group(1).replace(" ", " "), value)
+            value = re.sub(r"\\([&%$#_])", r"\1", value)             # \& in a title is an ampersand
             entry[f.group(1).lower()] = re.sub(r"[ \t\r\n]+", " ", re.sub(r"[{}]", "", value)).strip()
         if entry.get("pages"):
             entry["pages"] = re.sub(r"-{2,3}", "\u2013", entry["pages"])     # a page range as it is printed
@@ -92,6 +93,19 @@ def bib_fields(text: str) -> dict[str, dict]:
                                                     "publisher", "institution", "volume", "number", "pages", "doi", "url",
                                                     "eprint", "howpublished", "organization") if entry.get(k)}}
     return out
+
+
+def _no_year(doc: Document) -> str:
+    return "o. J." if doc.german else "n.d."
+
+
+def _accessed(web: dict, doc: Document) -> str:
+    """"(accessed 2026-11-10)" or "(abgerufen am 10.11.2026)": the day a web source was archived."""
+    day = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(web.get("accessed") or ""))
+    if not day:
+        return ""
+    y, m, d = day.groups()
+    return f"(abgerufen am {d}.{m}.{y})" if doc.german else f"(accessed {y}-{m}-{d})"
 
 
 def _surname(name: str) -> str:
@@ -105,16 +119,17 @@ def cite_label(key: str, doc: Document) -> tuple[str, str] | None:
         names = [n.strip() for n in re.split(r"\s+and\s+", ref.get("author") or ref.get("editor") or "") if n.strip()]
         who = (_surname(names[0]) if len(names) == 1 else f"{_surname(names[0])} and {_surname(names[1])}" if len(names) == 2
                else f"{_surname(names[0])} et al." if names else ref.get("title") or key)
-        return who.replace(" ", " "), ref.get("year") or "n.d."
+        return who.replace(" ", " "), ref.get("year") or _no_year(doc)
     web = doc.web_sources.get(key)
     if web:
         who = str(web.get("author") or "").strip("{}") or web.get("publisher") or web.get("title") or key
-        return who, str(web.get("date") or "")[:4] or "n.d."      # the day it was archived is not when it was published
+        return who, str(web.get("date") or "")[:4] or _no_year(doc)      # the day it was archived is not when it was published
     return None
 
 
-def source_line(key: str, doc: Document, *, markup: bool = False) -> str:
-    """One entry of a source list. `markup=True` sets the journal in *italics* (Markdown)."""
+def source_line(key: str, doc: Document, *, markup: bool = False, accessed: bool = False) -> str:
+    """One entry of a source list. `markup=True` sets the journal in *italics* (Markdown); `accessed=True`
+    adds the day a web source was archived ("abgerufen am ..."), as a printed source list gives it."""
     it = (lambda s: f"*{s}*") if markup else (lambda s: s)
     ref = doc.references.get(key)
     if ref:
@@ -123,7 +138,7 @@ def source_line(key: str, doc: Document, *, markup: bool = False) -> str:
         where = ref.get("journaltitle") or ref.get("journal") or ref.get("booktitle")
         issue = (ref.get("volume") or "") + (f"({ref['number']})" if ref.get("number") else "")
         link = f"https://doi.org/{ref['doi']}" if ref.get("doi") else ref.get("url")
-        parts = [f"{who or ref.get('title') or key} ({ref.get('year') or 'n.d.'}).",
+        parts = [f"{who or ref.get('title') or key} ({ref.get('year') or _no_year(doc)}).",
                  f"{ref['title']}." if who and ref.get("title") else "",
                  (f"{it(where)}{' ' + issue if issue else ''}{', ' + ref['pages'] if ref.get('pages') else ''}." if where
                   else f"{ref.get('publisher') or ref.get('institution')}." if ref.get("publisher") or ref.get("institution") else ""),
@@ -132,8 +147,10 @@ def source_line(key: str, doc: Document, *, markup: bool = False) -> str:
     web = doc.web_sources.get(key)
     if web:
         who, year = cite_label(key, doc)
-        return " ".join(p for p in (f"{who} ({year}).", f"{web['title']}." if web.get("title") else "",
-                                   "" if str(web.get("url") or "").startswith("file:") else str(web.get("url") or "")) if p)
+        # a web page without a date of its own is named without a year; the day it was archived follows the address
+        return " ".join(p for p in (f"{who} ({year})." if web.get("date") else who.rstrip(".") + ".", f"{web['title']}." if web.get("title") else "",
+                                   "" if str(web.get("url") or "").startswith("file:") else str(web.get("url") or ""),
+                                   _accessed(web, doc) if accessed else "") if p)
     return key
 
 
@@ -297,10 +314,39 @@ def out_dir(doc: Document, template_id: str) -> Path:
             else doc.project.root / "dist" / "render" / doc.name / template_id)
 
 
+# A piece may adjust the look of its own render, never the registered template: pieces/<id>/style/
+# with style.css (laid over the template's CSS) and style.yaml (these template settings only).
+STYLE_SETTINGS = {"scale", "empty_warn_pct"}
+_STYLE_FORBIDDEN = [(re.compile(r"@import|url\(\s*['\"]?\s*(?:https?:|//)", re.I), "loads something from the web (@import or url(http...))"),
+                    (re.compile(r"font-family\s*:\s*(?![^;}]*var\(--f-)[^;}]+", re.I), "names a typeface; use var(--f-body) or var(--f-heading): fonts come from the design")]
+
+
+def piece_style(doc: "Document") -> dict | None:
+    """The piece's own style (`pieces/<id>/style/`), checked: {"css", "settings", "files"}; None without one."""
+    folder = doc.folder / "style" if doc.kind == "piece" else None
+    if folder is None or not folder.is_dir():
+        return None
+    css_file, yaml_file = folder / "style.css", folder / "style.yaml"
+    css = css_file.read_text(encoding="utf-8") if css_file.is_file() else ""
+    settings = (yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}) if yaml_file.is_file() else {}
+    if not isinstance(settings, dict):
+        raise ValueError(f"pieces/{doc.name}/style/style.yaml must be a mapping")
+    problems = [f"pieces/{doc.name}/style/style.yaml: {k} cannot be set by a piece (only {', '.join(sorted(STYLE_SETTINGS))})"
+                for k in settings if k not in STYLE_SETTINGS]
+    problems += [f"pieces/{doc.name}/style/style.css {why}" for rx, why in _STYLE_FORBIDDEN if rx.search(css)]
+    if problems:
+        raise ValueError("not rendered:\n  " + "\n  ".join(problems))
+    files = [x.name for x in (css_file, yaml_file) if x.is_file()]
+    return {"css": css, "settings": settings, "files": files} if files else None
+
+
 def render(target: str, template_id: str, *, design_id: str | None = None, project: config.Project | None = None) -> dict:
     """Render a piece or deliverable with a registered template; returns the manifest."""
     doc = document(target, project)
     tpl = assets.template(template_id)
+    style = piece_style(doc)
+    if style:                                       # a copy: the registered template itself stays as it is
+        tpl = {**tpl, **style["settings"], "piece_style": style}
     reg = plugins.load()
     if tpl["kind"] not in reg.renderers:
         have = ", ".join(sorted(reg.renderers))
@@ -328,8 +374,15 @@ def render(target: str, template_id: str, *, design_id: str | None = None, proje
                 "files": sorted(Path(f).relative_to(out).as_posix() for f in files),
                 "results": {k: doc.results[k]["display"] for k in used if k in doc.results},
                 "missing_results": [k for k in used if k not in doc.results],
-                "sources": cited(doc.text), "notes": notes}
+                "sources": cited(doc.text), "notes": notes,
+                **({"piece_style": [f"style/{x}" for x in style["files"]]} if style else {})}
     config.write_atomic(out / "render.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    if doc.kind == "piece":                         # an open web view brings up what was just rendered
+        try:
+            from . import pieces
+            pieces.focus(doc.name, doc.project, why=f"render {template_id}")
+        except Exception:
+            pass                                    # the render is done; showing it is a convenience
     return {**manifest, "folder": str(out)}
 
 

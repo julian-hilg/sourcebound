@@ -5,10 +5,10 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { paths, useApi, type Handover } from "../data/api";
+import { paths, useApi, type Detail, type Handover } from "../data/api";
 import { ConfirmButton } from "../kit";
-import { anchorOf, inlineWith, parse, referenceLine, type Block, type Paper, type Section } from "../reader/markup";
-import { chosen, type State } from "./deliverable";
+import { anchorOf, inlineWith, parse, referenceLine, type Block, type CitationStyle, type Paper, type Section } from "../reader/markup";
+import { chosen, folderOf, formatsOf, type Format, type State } from "./deliverable";
 import { Blank, usePanelState, useProject, when } from "./lib";
 
 const REMARK = [remarkGfm, remarkMath];
@@ -145,7 +145,7 @@ function BlockView({ block: b, reading, project }: { block: Block; reading: Read
             <tr>
               {table.columns.map((c, i) => (
                 <th key={i} data-right={right?.[i] || undefined}>
-                  <Text markdown={inlineWith(c, reading.handover)} reading={reading} inline />
+                  <Text markdown={inlineWith(c, reading.handover, reading.paper)} reading={reading} inline />
                 </th>
               ))}
             </tr>
@@ -155,7 +155,7 @@ function BlockView({ block: b, reading, project }: { block: Block; reading: Read
               <tr key={n}>
                 {row.map((cell, i) => (
                   <td key={i} data-right={right?.[i] || undefined}>
-                    <Text markdown={inlineWith(cell, reading.handover)} reading={reading} inline />
+                    <Text markdown={inlineWith(cell, reading.handover, reading.paper)} reading={reading} inline />
                   </td>
                 ))}
               </tr>
@@ -176,6 +176,60 @@ function BlockView({ block: b, reading, project }: { block: Block; reading: Read
   );
 }
 
+/**
+ * A deliverable as a file: the LaTeX PDF, or a render (Word, PowerPoint) shown as the service
+ * converts it to PDF, so it looks as it prints. The file itself is one click away.
+ */
+function RenderedView({ project, deliverable, format, office }: { project: string; deliverable: string; format: Format; office: string | null | undefined }) {
+  const wb = useWerkbank();
+  const file = format.file;
+  const r = format.render;
+  if (!file) return <Blank>This render has no file left; render it again.</Blank>;
+  const office_ = /\.(docx|pptx)$/i.test(file);
+  const src = office_ ? paths.raw(project, file, "pdf") : paths.raw(project, file);
+  return (
+    <div className="sb-panel">
+      <div className="wb-toolhead sb-subhead">
+        <a className="sb-ref" href={paths.raw(project, file)} download={file.split("/").pop()} title={file}>
+          Download {file.split("/").pop()}
+        </a>
+        {r && (
+          <span className="wb-dim">
+            rendered {when(r.at)}
+            {r.design ? `, design ${r.design}` : ""}
+          </span>
+        )}
+        {r && r.stale.length > 0 && (
+          <span className="wb-warn" title={r.stale.join(", ")}>
+            {r.stale.length} number{r.stale.length === 1 ? "" : "s"} changed since
+          </span>
+        )}
+        <span className="sb-grow" />
+        {r && (
+          <button className="wb-button" title={`sb render deliverables/${deliverable} --template ${r.template}`} onClick={() => void wb.run("deliverable.render", { project, deliverable, template: r.template, design: r.design || undefined })}>
+            Render again
+          </button>
+        )}
+      </div>
+      {r?.notes?.map((line) => (
+        <p key={line} className="sb-notice">
+          {line}
+        </p>
+      ))}
+      {office_ && !office ? (
+        <Blank>
+          This machine cannot show {file.endsWith(".pptx") ? "PowerPoint" : "Word"} files here: install LibreOffice, or Microsoft Office on Windows. The file itself is above.
+        </Blank>
+      ) : (
+        <object key={`${src}|${r?.at ?? ""}`} className="sb-document" data={`${src}#view=FitH`} type="application/pdf" aria-label={format.label}>
+          <Blank>This browser does not show PDF files. Download the file above.</Blank>
+        </object>
+      )}
+      {office_ && office && <p className="wb-hint sb-pad">Shown as converted by {office === "word" ? "Word" : "LibreOffice"}; the first view after a render takes a few seconds.</p>}
+    </div>
+  );
+}
+
 export default function DeliverableView() {
   const wb = useWerkbank();
   const { id, list } = useProject();
@@ -187,12 +241,14 @@ export default function DeliverableView() {
   const [fontSize] = useSetting<number>("reader.fontSize");
   const [showEdited] = useSetting<boolean>("reader.showEdited");
   const [showReferences] = useSetting<boolean>("reader.showReferences");
+  const [citations] = useSetting<CitationStyle>("reader.citations");
   const [confirmHandover] = useSetting<boolean>("confirm.handover");
   const entry = useApi<Handover>(id ? paths.handover(id) : null);
+  const detail = useApi<Detail>(id ? paths.project(id) : null);
   const page = useRef<HTMLDivElement | null>(null);
   const h = entry.data;
   const d = h?.built ? chosen(h, state) : undefined;
-  const paper = useMemo(() => (h && d ? parse(d, h) : null), [h, d]);
+  const paper = useMemo(() => (h && d ? parse(d, h, citations) : null), [h, d, citations]);
   const reading = useMemo<Reading | null>(
     () =>
       h && paper
@@ -250,14 +306,35 @@ export default function DeliverableView() {
       </section>
     );
   };
+  const formats = formatsOf(folderOf(detail.data, d.name));
+  const shown = formats.find((x) => x.value === (state.view ?? "text")) ?? formats[0]!;
+  const head = (
+    <div className="wb-toolhead">
+      {h.handover.deliverables.length > 1 ? (
+        <Select value={d.name} aria-label="Deliverable" options={h.handover.deliverables.map((x) => ({ value: x.name, label: x.name }))} onChange={(deliverable) => setState({ ...state, deliverable, view: "text" })} />
+      ) : (
+        <strong>{d.name}</strong>
+      )}
+      <span className="wb-segment" role="group" aria-label="Format">
+        {formats.map((x) => (
+          <button key={x.value} className="wb-button" aria-pressed={x.value === shown.value} title={x.file ?? "The text, read from the handover"} onClick={() => setState({ ...state, view: x.value })}>
+            {x.label}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+  if (shown.kind !== "text")
+    return (
+      <div className="sb-panel">
+        {head}
+        <RenderedView project={id} deliverable={d.name} format={shown} office={h.office_as_pdf} />
+      </div>
+    );
   return (
     <div className="sb-panel">
-      <div className="wb-toolhead">
-        {h.handover.deliverables.length > 1 ? (
-          <Select value={d.name} aria-label="Deliverable" options={h.handover.deliverables.map((x) => ({ value: x.name, label: x.name }))} onChange={(deliverable) => setState({ deliverable })} />
-        ) : (
-          <strong>{d.name}</strong>
-        )}
+      {head}
+      <div className="wb-toolhead sb-subhead">
         <Select value="" placeholder="Go to section" aria-label="Go to section" options={paper.outline.map((o) => ({ value: o.anchor, label: `${o.number} ${o.text.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")}` }))} onChange={(anchor) => reading.jump(anchor)} />
         <span>{paper.words.toLocaleString("en")} words</span>
         <span className={h.stale ? "wb-warn" : undefined} title={h.stale ? `Changed since: ${(h.changed_since ?? []).join(", ")}` : undefined}>
@@ -297,7 +374,8 @@ export default function DeliverableView() {
             <section className="sb-references">
               <h2>References</h2>
               {paper.cited.map((key) => (
-                <p key={key} data-anchor={`ref-${key}`}>
+                <p key={key} data-anchor={`ref-${key}`} className={paper.numbers ? "sb-numbered" : undefined}>
+                  {paper.numbers && <span className="sb-refno">[{paper.numbers.get(key)}]</span>}
                   <Text markdown={referenceLine(key, sources)} reading={reading} inline />
                 </p>
               ))}

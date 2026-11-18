@@ -1030,6 +1030,42 @@ Banks & yes & -- \\
     assert "> **For providers.**\n>\n> Three ways:\n>\n> 1. One." in md
 
 
+def test_markdown_group_after_spacing_is_not_an_argument():
+    from sourcebound.handover import to_markdown
+    md, left = to_markdown(r"Text.\par\vspace{3pt}{\raggedright\footnotesize\textit{Note:} Own data.\par}", {})
+    assert left == [] and "{" not in md and "}" not in md
+    assert "*Note:* Own data." in md
+
+
+def test_markdown_quotes_follow_the_language_and_symbols_are_converted(tmp_path):
+    from sourcebound import handover
+    tex = r"Das \enquote{Gesetz} und ``Zitat''."
+    assert "Das “Gesetz” und “Zitat”" in handover.to_markdown(tex)[0]          # English by default
+    assert "Das „Gesetz“ und „Zitat“" in handover.to_markdown(tex, lang="de")[0]
+    assert handover.to_markdown("Er sagte \"`ja\"'.", lang="de")[0].strip() == "Er sagte „ja“."   # babel's shorthands
+    main = (r"\DocumentMetadata{lang=de-DE}" "\n" r"\documentclass[lang=ngerman]{sbpaper}" "\n"
+            r"\title{Titel}\author{Firma GmbH \textperiodcentered{} Projekt\quad A\slash B \textbar{} C \textbullet\ D}"
+            r"\date{Stand: 10.11.2026 \textperiodcentered\ Arbeitsfassung}" "\n" r"\begin{document}\end{document}")
+    assert handover.language(main) == "de" and handover.language(r"\usepackage[english]{babel}", "de") == "en"
+    assert handover.language(r"\documentclass{article}", "de") == "de"                 # main.tex says nothing: the project's
+    meta = handover._meta(main, "de")
+    assert meta["author"] == "Firma GmbH · Projekt A/B | C • D"
+    assert meta["date"] == "Stand: 10.11.2026 · Arbeitsfassung" and "\\" not in "".join(meta.values())
+
+
+def test_source_lines_in_german_and_with_the_day_a_page_was_archived(tmp_path):
+    from sourcebound import render as core
+    refs = core.bib_fields("@report{k1, author = {{MSCI Inc., Indexed Investments \\& Solutions}}, title = {Reform \\& Act}}")
+    web = {"W-0001": {"title": "Seite", "publisher": "Amt", "url": "https://example.org", "accessed": "2026-11-10T10:12:36+00:00"}}
+    doc = lambda lang: core.Document(project=None, name="x", kind="deliverable", title="t", lang=lang, folder=tmp_path,
+                                     references=refs, web_sources=web)
+    assert core.source_line("k1", doc("de")) == "MSCI Inc., Indexed Investments & Solutions (o. J.). Reform & Act."
+    assert core.source_line("k1", doc("en")).startswith("MSCI Inc., Indexed Investments & Solutions (n.d.).")
+    assert core.source_line("W-0001", doc("de")) == "Amt. Seite. https://example.org"                # no date of its own: no year
+    assert core.source_line("W-0001", doc("de"), accessed=True).endswith("https://example.org (abgerufen am 10.11.2026)")
+    assert core.source_line("W-0001", doc("en"), accessed=True).endswith("(accessed 2026-11-10)")
+
+
 def test_desktop_icon_starts_the_web_view(tmp_path):
     from sourcebound import shortcut
     assert shortcut.available()                                    # this checkout has the frontend
@@ -1311,6 +1347,80 @@ def test_a_piece_from_a_local_document_to_rendered_text(desk, tmp_path, capsys):
         (config.hub().registry / "templates" / "deck").mkdir(parents=True)
         (config.hub().registry / "templates" / "deck" / "template.yaml").write_text("kind: hologram\n", encoding="utf-8")
         render.render("p1", "deck", project=p)
+
+
+def test_piece_export_to_the_marketing_folder_never_touches_other_files(desk, tmp_path, capsys):
+    import json
+    from sourcebound import config, pieces, render
+    from sourcebound.cli import main
+    main(["piece", "add", "ETF", "Kosten", "--id", "20261118-etf-kosten", "--template", "text"])
+    p = config.project()
+    pieces.update("20261118-etf-kosten", p, scheduled_at="2026-11-20 08:30")
+    (desk / "pieces" / "20261118-etf-kosten" / "text.md").write_text("Kosten sinken.\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="no render yet"):
+        pieces.export("20261118-etf-kosten", p, to=tmp_path)
+    render.render("20261118-etf-kosten", "text", project=p)
+    with pytest.raises(ValueError, match="no export folder"):
+        pieces.export("20261118-etf-kosten", p)
+    marketing = tmp_path / "Marketing" / "LinkedIn"
+    (marketing / "KnowTheFlow").mkdir(parents=True)
+    (marketing / "KnowTheFlow" / "KtF.PNG").write_bytes(b"x")
+    (desk / "project.yaml").write_text((desk / "project.yaml").read_text(encoding="utf-8")
+                                       + f'\nexport:\n  dir: "{marketing.as_posix()}"\n', encoding="utf-8")
+    p = config.project()
+    r = pieces.export("20261118-etf-kosten", p)
+    out = marketing / "20261120_etf_kosten"                         # the planned posting day, the id without its date
+    assert r["folder"] == str(out) and r["files"] == ["20261118-etf-kosten.txt"]
+    assert json.loads((out / pieces.MARKER).read_text(encoding="utf-8"))["piece"] == "20261118-etf-kosten"
+    (out / "my notes.txt").write_text("kept", encoding="utf-8")       # the person's own file in the export
+    main(["piece", "export", "20261118-etf-kosten"])                  # again: replaces only what it wrote
+    assert "exported to" in capsys.readouterr().out and (out / "my notes.txt").exists()
+    assert (marketing / "KnowTheFlow" / "KtF.PNG").exists()
+    (marketing / "20261120_other").mkdir()
+    (marketing / "20261120_other" / "a.pdf").write_bytes(b"x")
+    with pytest.raises(ValueError, match="was not written by an export"):
+        pieces.prepare_export(marketing / "20261120_other", "20261118-etf-kosten")
+    assert (marketing / "20261120_other" / "a.pdf").exists()
+    with pytest.raises(ValueError, match="not a folder name"):
+        pieces.export_name("x", {}, "{slug}/..")
+
+
+def test_a_post_cites_the_original_sources_not_the_desks_own_work(desk, tmp_path, capsys):
+    from sourcebound import config, pieces
+    from sourcebound.cli import main
+    study = tmp_path / "Studie.txt"
+    study.write_text("Ab 2027 gilt das neue Depot.\n", encoding="utf-8")
+    main(["doc", str(study), "--title", "Das Altersvorsorgedepot", "--publisher", "Example Advisors GmbH"])
+    main(["piece", "add", "Depot", "--id", "d1", "--template", "text"])
+    (desk / "pieces" / "d1" / "text.md").write_text("Ab 2027 gilt das neue Depot [@W-0001].\n", encoding="utf-8")
+    assert pieces.check("d1", config.project())[0] == []                  # no own publishers named: nothing to say
+    (desk / "project.yaml").write_text((desk / "project.yaml").read_text(encoding="utf-8")
+                                       + '\nown: {publishers: ["Example Advisors"]}\nself_citation: false\n', encoding="utf-8")
+    errs = pieces.check("d1", config.project())[0]
+    assert errs == ["source W-0001 is the desk's own work (Example Advisors GmbH): cite the original sources it rests on; "
+                    "self_citation: true in the piece's card only where the person asked for it"]
+    main(["piece", "set", "d1", "--self-citation", "true"])                # the person asked for it
+    assert pieces.check("d1", config.project())[0] == []
+
+
+def test_a_piece_adjusts_its_own_style_within_the_design(desk):
+    from sourcebound import config, render
+    from sourcebound.cli import main
+    main(["piece", "add", "Styled", "--id", "s1", "--template", "text"])
+    p = config.project()
+    (desk / "pieces" / "s1" / "text.md").write_text("Text.\n", encoding="utf-8")
+    style = desk / "pieces" / "s1" / "style"
+    style.mkdir()
+    (style / "style.yaml").write_text("scale: 3\nwidth: 2000\n", encoding="utf-8")
+    (style / "style.css").write_text("@import url(https://example.org/x.css);\n.title { font-family: Comic Sans MS; }\n", encoding="utf-8")
+    with pytest.raises(ValueError) as e:
+        render.render("s1", "text", project=p)
+    assert "width cannot be set by a piece" in str(e.value) and "loads something from the web" in str(e.value) and "names a typeface" in str(e.value)
+    (style / "style.yaml").write_text("scale: 3\n", encoding="utf-8")
+    (style / "style.css").write_text(".title { font-family: var(--f-heading); margin-top: 40px; }\n", encoding="utf-8")
+    m = render.render("s1", "text", project=p)
+    assert m["piece_style"] == ["style/style.css", "style/style.yaml"]
+    assert render.piece_style(render.document("s1", p))["settings"] == {"scale": 3}
 
 
 def test_piece_decisions_belong_to_the_person(desk, capsys):

@@ -360,4 +360,38 @@ export const commands: Command<Werkbank, any>[] = [
       return render;
     },
   },
+  {
+    id: "piece.export",
+    title: "Export a piece to its folder (sb piece export)",
+    category: "Pieces",
+    // Copies files to a folder outside the project (export.dir, e.g. a shared marketing folder). It never
+    // deletes what it did not write, but it has no inverse: external. It posts nothing.
+    risk: "external",
+    palette: false,
+    input: z.object({ project, id: z.string().min(1) }),
+    run: async (_ctx, i: { project: string; id: string }) => {
+      const { export: done } = await api.post<{ export: { folder: string; files: string[] } }>(paths.pieces(i.project), { op: "export", id: i.id });
+      return done;
+    },
+  },
+  {
+    id: "deliverable.render",
+    title: "Render a deliverable with a template (sb render deliverables/NAME)",
+    category: "Deliverables",
+    // Rewrites dist/render/<name>/<template>/ in the project from the handover; as piece.render, files
+    // outside the app without an inverse: external.
+    risk: "external",
+    palette: false,
+    input: z.object({
+      project,
+      deliverable: z.string().min(1).describe("A folder under deliverables/"),
+      template: z.string().min(1).describe("A template id from the Assets panel, e.g. a Word template"),
+      design: z.string().describe("A design id; default: the template's").optional(),
+    }),
+    run: async (_ctx, i: { project: string; deliverable: string; template: string; design?: string }) => {
+      const { render } = await api.post<{ render: Record<string, unknown> }>(paths.render(i.project), { deliverable: i.deliverable, template: i.template, design: i.design });
+      void api.refresh(paths.project(i.project));
+      return render;
+    },
+  },
 ];

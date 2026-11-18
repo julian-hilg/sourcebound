@@ -202,7 +202,7 @@ def cmd_doc(a):
 
 def cmd_piece(a):
     from . import config, pieces
-    fields = {k: getattr(a, k) for k in ("title", "kind", "template", "design", "status", "lang", "channel", "note", "prompt", "url")
+    fields = {k: getattr(a, k) for k in ("title", "kind", "template", "design", "status", "lang", "channel", "note", "prompt", "url", "self_citation")
               if getattr(a, k, None) is not None}
     if a.at is not None:
         fields["scheduled_at"] = a.at
@@ -239,6 +239,15 @@ def cmd_piece(a):
         elif a.what == "rm":
             x = pieces.remove(_one(a))
             print(f"removed {x['id']} (kept in pieces/.removed/{x['id']})")
+        elif a.what == "open":
+            x = pieces.focus(_one(a))
+            from . import ui
+            print(f"the web view shows {x['project']}/{x['piece']}" if ui.running() else
+                  f"{x['project']}/{x['piece']} is shown when the web view opens (desktop icon or sb ui)")
+        elif a.what == "export":
+            r = pieces.export(_one(a), to=a.to)
+            print(f"exported to {r['folder']}: {', '.join(r['files'])}")
+            print("nothing was posted; posting stays your step")
         elif a.what == "due":
             rows = pieces.due()
             for x in rows:
@@ -445,8 +454,11 @@ def add_parsers(sub) -> None:
     s.add_argument("--author"); s.add_argument("--date"); s.add_argument("--note")
     s.add_argument("--new", action="store_true", help="register again even if the same bytes are already a source")
     s.set_defaults(f=cmd_doc)
-    s = sub.add_parser("piece"); s.add_argument("what", choices=["list", "add", "show", "set", "rm", "check", "due"])
+    s = sub.add_parser("piece"); s.add_argument("what", choices=["list", "add", "show", "set", "rm", "check", "due", "export", "open"])
     s.add_argument("args", nargs="*"); s.add_argument("--id"); s.add_argument("--at", help='when to publish, e.g. "2026-11-20 08:30"')
+    s.add_argument("--to", help="export: the folder to export into (default: export.dir in project.yaml)")
+    s.add_argument("--self-citation", dest="self_citation", choices=["true", "false"],
+                   help="set: the piece may cite the desk's own work (own.publishers), only where the person asked for it")
     for opt in ("title", "kind", "template", "design", "status", "lang", "channel", "note", "prompt", "url"):
         s.add_argument(f"--{opt}")
     s.set_defaults(f=cmd_piece)

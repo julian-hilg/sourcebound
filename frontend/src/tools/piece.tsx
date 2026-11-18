@@ -69,6 +69,12 @@ function PiecePanel() {
   };
   const template = state.renderWith || piece.template || data.templates[0]?.id || "";
   const render = async () => say(await wb.run("piece.render", { project, id: piece.id, template }), `Rendered with ${template}.`);
+  const exportTo = data.export_dir;
+  const exportFiles = async () => {
+    const result = await wb.run("piece.export", { project, id: piece.id });
+    if (result.ok) setMessage({ text: `Exported to ${(result.value as { folder: string }).folder}. Nothing was posted.` });
+    else setMessage({ tone: "bad", text: result.error });
+  };
   const decide = async (status: "approved" | "scheduled" | "published", extra: object = {}) => say(await wb.run("piece.decide", { project, id: piece.id, status, ...extra }), status === "scheduled" ? "Scheduled." : status === "approved" ? "Approved." : "Marked as published.");
   const slot = state.when.trim();
   const field = (k: Exclude<(typeof KEYS)[number], "text">, label: string, control: React.ReactNode) => (
@@ -202,6 +208,15 @@ function PiecePanel() {
               Render
             </ConfirmButton>
             {dirty.length > 0 && <span className="wb-warn">Save first: a render reads the saved files.</span>}
+            <span className="sb-grow" />
+            <button
+              className="wb-button"
+              disabled={!exportTo || piece.renders.length === 0}
+              title={exportTo ? `Copies the newest render of every template, the post text and the alt texts to ${exportTo} (sb piece export)` : "Set export.dir in project.yaml to export (e.g. a shared marketing folder)"}
+              onClick={() => void exportFiles()}
+            >
+              Export to folder
+            </button>
           </p>
           {piece.renders.length === 0 && <p className="wb-hint">Not rendered yet. A render turns the text into a format: plain text for a post, Markdown, and whatever the installed plugins offer (Word, slides).</p>}
           {piece.renders.map((r) => (

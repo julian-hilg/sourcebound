@@ -30,15 +30,16 @@ export const appSettings: SettingSpec<any>[] = [
   { key: "projects.deskWorkspace", title: "Workspace for a desk", section: "Projects", description: "Used by “Open in its workspace” for ongoing research that produces pieces.", default: "Desk", ...choice(WORKSPACES, workspaceLabels) },
 
   // ---- the deliverable reader
-  { key: "reader.font", title: "Typeface", section: "Reader", description: "The deliverable reader's text.", default: "serif", ...choice(["serif", "sans"], { serif: "Serif, as in the PDF", sans: "Sans-serif, as the rest of the app" }) },
+  { key: "reader.font", title: "Typeface", section: "Reader", description: "The deliverable reader's text.", default: "sans", ...choice(["serif", "sans"], { serif: "Serif, as in the PDF", sans: "Sans-serif, as the rest of the app" }) },
   { key: "reader.width", title: "Text width", section: "Reader", description: "How wide the page is before it stops growing with the panel.", default: "normal", ...choice(["narrow", "normal", "wide"], { narrow: "Narrow (about 60 characters)", normal: "Normal (about 75 characters)", wide: "Wide (about 95 characters)" }) },
   { key: "reader.fontSize", title: "Text size", section: "Reader", description: "In pixels.", schema: z.number().int().min(12).max(24), default: 16 },
   { key: "reader.markNumbers", title: "Mark recorded numbers", section: "Reader", description: "A dotted line under every number that comes from a recorded result.", schema: z.boolean(), default: true },
   { key: "reader.showEdited", title: "Mark sections edited by a person", section: "Reader", description: "Show which sections changed since the last agent commit.", schema: z.boolean(), default: true },
+  { key: "reader.citations", title: "Citations", section: "Reader", description: "How the reader shows a citation in the text.", default: "numbered", ...choice(["numbered", "author-year"], { numbered: "Numbered, [1] (as in the Word renders)", "author-year": "Author and year (as in the LaTeX PDF)" }) },
   { key: "reader.showReferences", title: "Show the reference list", section: "Reader", description: "The list of cited sources at the end of the text.", schema: z.boolean(), default: true },
 
   // ---- tables and grids
-  { key: "tables.density", title: "Row height in tables", section: "Tables", description: "Applies to the lists and grids of this app's panels.", default: "compact", ...choice(["compact", "comfortable"], { compact: "Compact", comfortable: "Comfortable" }) },
+  { key: "tables.density", title: "Row height in tables", section: "Tables", description: "Applies to the lists and grids of this app's panels.", default: "comfortable", ...choice(["compact", "comfortable"], { compact: "Compact", comfortable: "Comfortable" }) },
   { key: "tables.previewRows", title: "Rows in a table preview", section: "Tables", description: "How many rows the Lake panel loads when a table is selected.", default: "200", ...choice(["50", "200", "1000", "5000"], { "50": "50 rows", "200": "200 rows", "1000": "1,000 rows", "5000": "5,000 rows (the most the service returns)" }) },
   { key: "tables.nullText", title: "Text for an empty value", section: "Tables", description: "What grids show where the data has no value.", schema: z.string().max(12), default: "NULL", control: "text", suggestions: ["NULL", "–", "n/a"] },
 
@@ -62,6 +63,7 @@ export const appSettings: SettingSpec<any>[] = [
   { key: "fetchlog.maxRows", title: "Requests shown", section: "Fetch log", description: "The service returns the newest 200 per source.", schema: z.number().int().min(20).max(1000), default: 200 },
 
   // ---- pieces
+  { key: "pieces.follow", title: "Show what an agent works on", section: "Pieces", description: "When an agent renders a piece or runs `sb piece open`, select that project and piece and show its post preview.", schema: z.boolean(), default: true },
   { key: "pieces.template", title: "Template for a new piece", section: "Pieces", description: "A template id from the Assets panel. Empty: the project's own default, if it names one.", schema: z.string().max(60), default: "", control: "text" },
   { key: "pieces.kind", title: "Kind of a new piece", section: "Pieces", schema: z.string().max(30), default: "post", control: "text", suggestions: ["post", "note", "idea", "briefing", "report"] },
   { key: "pieces.channel", title: "Channel of a new piece", section: "Pieces", description: "Where pieces usually go, e.g. linkedin or newsletter.", schema: z.string().max(40), default: "", control: "text", suggestions: ["linkedin", "newsletter", "internal"] },

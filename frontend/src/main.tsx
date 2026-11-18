@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Shell } from "@werkbank/framework";
 import "@werkbank/framework/styles.css";
 import "./kit/kit.css";
+import "./theme.css";
 import "./app.css";
 import { werkbank } from "./app";
 import { api } from "./data/api";

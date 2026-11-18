@@ -71,8 +71,10 @@ function Projects() {
                   ])
                 }
               >
-                <td className="sb-wrap" title={p.path}>
-                  <strong>{p.slug}</strong> <span className="wb-dim">{p.title !== p.slug ? p.title : ""}</span>
+                <td className="sb-wrap" title={`${p.title}
+${p.path}`}>
+                  <strong>{p.slug}</strong>
+                  {p.title !== p.slug && <div className="wb-dim sb-clamp">{p.title}</div>}
                   {p.error && <div className="wb-warn">Cannot be read: {p.error}</div>}
                 </td>
                 <td>{p.kind ?? "study"}</td>

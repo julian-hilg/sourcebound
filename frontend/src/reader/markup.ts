@@ -31,6 +31,8 @@ export interface Paper {
   footnotes: string[];
   /** Result keys the text uses that were never recorded. */
   missing: string[];
+  /** Numbered citations: key -> number; null for author-year. */
+  numbers: Map<string, number> | null;
   words: number;
 }
 
@@ -105,7 +107,22 @@ interface Context {
   cited: Set<string>;
   missing: Set<string>;
   footnotes: string[];
+  /** Numbered citations ([1], [2, S. 4]) in the order of first use; null for author-year. */
+  numbers: Map<string, number> | null;
 }
+
+/** How the reader cites: numbered as in the Word renders, or author-year as in the LaTeX house style. */
+export type CitationStyle = "numbered" | "author-year";
+
+const contextOf = (handover: Handover, numbers: Map<string, number> | null): Context => ({
+  results: handover.results ?? {},
+  sources: { references: handover.references ?? {}, web: handover.web_sources ?? {} },
+  targets: new Map(),
+  cited: new Set(),
+  missing: new Set(),
+  footnotes: [],
+  numbers,
+});
 
 /** The text between a `^[` and its matching `]`. */
 function footnoteEnd(text: string, start: number): number {
@@ -136,10 +153,19 @@ function inline(text: string, ctx: Context): string {
     if (!r) ctx.missing.add(key);
     return r ? String(r.display) : `?${key}`;
   };
+  const number = (key: string): number => {
+    const numbers = ctx.numbers!;
+    if (!numbers.has(key)) numbers.set(key, numbers.size + 1);
+    return numbers.get(key)!;
+  };
   const cite = (key: string, textual: boolean, locator = ""): string | null => {
     const parts = citeParts(key, ctx.sources);
     if (!parts) return null;
     ctx.cited.add(key);
+    if (ctx.numbers) {
+      const link = `[${escape(`${number(key)}${locator}`)}](#sb-cite:${key})`;
+      return textual ? `${escape(parts.who)} \\[${link}\\]` : link;
+    }
     const label = textual ? `${parts.who} (${parts.year}${locator})` : `${parts.who} ${parts.year}${locator}`;
     return `[${escape(label)}](#sb-cite:${key})`;
   };
@@ -161,7 +187,8 @@ function inline(text: string, ctx: Context): string {
             const link = m ? cite(m[2]!, false, m[3]!.trim() ? `${m[3]!.trim().startsWith(",") ? "" : " "}${m[3]!.trim()}` : "") : null;
             return m && link ? `${m[1]}${link}` : null;
           });
-          return items.every(Boolean) ? `(${items.join("; ")})` : whole;
+          if (!items.every(Boolean)) return whole;
+          return ctx.numbers ? `\\[${items.join(", ")}\\]` : `(${items.join("; ")})`;
         })
         .replace(CITE_KEY, (whole, key: string) => cite(key, true) ?? whole);
     })
@@ -192,7 +219,7 @@ const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").re
 const isNote = (p: string | undefined): p is string => Boolean(p && /^\*[^*][\s\S]*\*$/.test(p) && !p.slice(1, -1).includes("*"));
 const isPipeTable = (p: string | undefined): p is string => Boolean(p && p.startsWith("|") && /\n\|[\s:|-]+\|/.test(p));
 
-export function parse(deliverable: HandoverDeliverable, handover: Handover): Paper {
+export function parse(deliverable: HandoverDeliverable, handover: Handover, citations: CitationStyle = "numbered"): Paper {
   const texts = handover.sections ?? {};
   const targets = new Map<string, Target>();
   const sections: Section[] = [];
@@ -274,14 +301,7 @@ export function parse(deliverable: HandoverDeliverable, handover: Handover): Pap
   }
 
   // Pass 2: numbers, citations and references inside the text.
-  const ctx: Context = {
-    results: handover.results ?? {},
-    sources: { references: handover.references ?? {}, web: handover.web_sources ?? {} },
-    targets,
-    cited: new Set(),
-    missing: new Set(),
-    footnotes: [],
-  };
+  const ctx: Context = { ...contextOf(handover, citations === "numbered" ? new Map() : null), targets };
   let words = 0;
   for (const s of sections)
     for (const b of s.blocks) {
@@ -304,10 +324,11 @@ export function parse(deliverable: HandoverDeliverable, handover: Handover): Pap
   return {
     sections,
     outline: sections.flatMap((s) => s.blocks.flatMap((b) => (b.type === "heading" ? [{ anchor: b.anchor, number: b.number, text: b.text, level: b.level }] : []))),
-    cited: [...ctx.cited].sort((a, b) => label(a).localeCompare(label(b))),
+    cited: ctx.numbers ? [...ctx.numbers.keys()] : [...ctx.cited].sort((a, b) => label(a).localeCompare(label(b))),
     footnotes: ctx.footnotes,
     missing: [...ctx.missing].sort(),
     words,
+    numbers: ctx.numbers,
   };
 }
 
@@ -317,6 +338,8 @@ export function anchorOf(paper: Paper, label: string): string | null {
   return null;
 }
 
-/** Inline Markdown for a table cell or a caption taken from elsewhere (a CSV cell). */
-export const inlineWith = (text: string, handover: Handover): string =>
-  inline(text, { results: handover.results ?? {}, sources: { references: handover.references ?? {}, web: handover.web_sources ?? {} }, targets: new Map(), cited: new Set(), missing: new Set(), footnotes: [] });
+/**
+ * Inline Markdown for a table cell or a caption taken from elsewhere (a CSV cell). With the paper,
+ * citations take the paper's numbers; a source cited only in such a cell gets the next number.
+ */
+export const inlineWith = (text: string, handover: Handover, paper?: Paper): string => inline(text, contextOf(handover, paper?.numbers ?? null));

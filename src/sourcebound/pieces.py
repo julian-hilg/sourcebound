@@ -27,7 +27,7 @@ from . import config, results
 
 STATUS = ["idea", "draft", "review", "approved", "scheduled", "published", "dropped"]
 USER_ONLY = {"approved", "scheduled", "published"}      # set by the person, never by an agent
-FIELDS = ("title", "kind", "template", "design", "status", "lang", "channel", "scheduled_at", "published_at", "url", "note", "prompt")
+FIELDS = ("title", "kind", "template", "design", "status", "lang", "channel", "scheduled_at", "published_at", "url", "note", "prompt", "self_citation")
 ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
 HEADER = "# A piece: one small output of this project (`sb piece`). The text is in text.md.\n"
 
@@ -312,10 +312,17 @@ def findings(piece_id: str, project: config.Project | None = None) -> dict:
     used = sorted({k.strip() for k in render.MD_RESULT.findall(body)})
     for k in sorted(set(used) - set(doc.results)):
         errs.append(f"result {k} is used but not recorded")
+    own = [str(x).strip().lower() for x in ((p.meta.get("own") or {}).get("publishers") or []) if str(x).strip()]
+    allowed = str(doc.meta.get("self_citation", p.meta.get("self_citation", True))).lower() in {"true", "yes", "1"}
     for k in render.cited(body):
         if re.fullmatch(r"W-\d{4}", k):
             if k not in doc.web_sources:
                 errs.append(f"source {k} is cited but not in evidence/sources.yaml (sb snap URL, or sb doc FILE)")
+            elif own and not allowed:
+                who = str(doc.web_sources[k].get("publisher") or doc.web_sources[k].get("author") or "")
+                if any(o in who.lower() for o in own):
+                    errs.append(f"source {k} is the desk's own work ({who}): cite the original sources it rests on; "
+                                "self_citation: true in the piece's card only where the person asked for it")
         elif k not in doc.references:
             warns.append(f"citation key {k} is not in evidence/inbox.bib or a references.bib of this project")
     if not render.cited(body) and doc.text.strip():
@@ -363,6 +370,118 @@ def check(piece_id: str, project: config.Project | None = None) -> tuple[list[st
     """(errors, warnings) of `findings`."""
     f = findings(piece_id, project)
     return f["errors"], f["warnings"]
+
+
+# ------------------------------------------------------------------ focus: the piece the web view should show
+def focus_path() -> Path | None:
+    h = config.hub(required=False)
+    return h.lake_root / "activity" / "focus.json" if h else None
+
+
+def focus(piece_id: str, project: config.Project | None = None, *, why: str = "open") -> dict:
+    """Ask the web view to show this piece (`sb piece open`; every render of a piece does it too).
+    The view reads <data root>/activity/focus.json; nothing else changes."""
+    import json
+    p = project or config.project()
+    get(piece_id, p)                                 # the piece exists
+    stamp = {"project": p.slug, "piece": piece_id, "why": why, "at": datetime.now().astimezone().isoformat(timespec="seconds")}
+    f = focus_path()
+    if f is not None:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        config.write_atomic(f, json.dumps(stamp, ensure_ascii=False) + "\n")
+    return stamp
+
+
+def current_focus() -> dict | None:
+    import json
+    f = focus_path()
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f and f.exists() else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+# ------------------------------------------------------------------ export: a piece's files, where the person keeps them
+MARKER = ".sourcebound-export.json"
+
+
+def export_name(piece_id: str, meta: dict, pattern: str = "{date}_{slug}") -> str:
+    """The folder name of an export: `{date}` is the planned posting day (else today) as YYYYMMDD,
+    `{slug}` the piece id without its date prefix, `{id}` the id."""
+    at = str(meta.get("scheduled_at") or "")[:10]
+    day = at.replace("-", "") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", at) else f"{date.today():%Y%m%d}"
+    slug = re.sub(r"^\d{8}-", "", piece_id).replace("-", "_")
+    name = pattern.format(date=day, slug=slug, id=piece_id)
+    if not name or name in (".", "..") or re.search(r"[\\/:*?\"<>|]", name):
+        raise ValueError(f"export name {name!r} from {pattern!r} is not a folder name")
+    return name
+
+
+def prepare_export(dest: Path, piece_id: str) -> None:
+    """Make `dest` ready for an export of this piece without ever deleting what someone else put there:
+    a new folder, or one that an earlier export of the same piece wrote (its marker lists the files)."""
+    import json
+    if dest.exists() and not dest.is_dir():
+        raise ValueError(f"{dest} is a file")
+    if dest.is_dir() and any(dest.iterdir()):
+        marker = dest / MARKER
+        old = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else None
+        if not old or old.get("piece") != piece_id:
+            raise ValueError(f"{dest} exists and was not written by an export of {piece_id}; choose another folder "
+                             "or move it away (nothing was changed)")
+        for name in old.get("files", []):                 # only what the last export wrote
+            f = dest / name
+            if f.is_file() and f.parent == dest:
+                f.unlink()
+    dest.mkdir(parents=True, exist_ok=True)
+
+
+def export(piece_id: str, project: config.Project | None = None, *, to: str | Path | None = None) -> dict:
+    """Copy what a piece is made of to the folder where it is kept (for a LinkedIn desk e.g.
+    U:/Marketing/LinkedIn/20261120_slug): the newest render of every template, the post text and the
+    alternative texts. Where: `to`, else `export.dir` in project.yaml, in a folder named after
+    `export.name` (default "{date}_{slug}"). Nothing is posted; the export is a copy."""
+    import json
+    from . import render
+    p = project or config.project()
+    meta = get(piece_id, p)
+    conf = p.meta.get("export") if isinstance(p.meta.get("export"), dict) else {}
+    root = Path(str(to or conf.get("dir") or "")).expanduser() if (to or conf.get("dir")) else None
+    if root is None:
+        raise ValueError("no export folder: give one (sb piece export ID --to FOLDER) or set export.dir in project.yaml")
+    if not root.is_absolute():
+        root = (p.root / root).resolve()
+    if not root.is_dir():
+        raise ValueError(f"the export folder {root} does not exist (is the drive connected?)")
+    dest = root / export_name(piece_id, meta, str(conf.get("name") or "{date}_{slug}"))
+    newest: dict[str, dict] = {}
+    for m in render.renders(folder(p, piece_id) / "render"):
+        if m["template"] not in newest or m["at"] > newest[m["template"]]["at"]:
+            newest[m["template"]] = m
+    if not newest:
+        raise ValueError(f"{piece_id} has no render yet: sb render {piece_id} --template ID")
+    prepare_export(dest, piece_id)
+    written: list[str] = []
+    for m in newest.values():
+        src = Path(m["folder"])
+        for name in m.get("files") or []:
+            f = src / name
+            if f.is_file() and f.suffix.lower() not in {".json", ".html"} and name not in written:
+                shutil.copy2(f, dest / Path(name).name)
+                written.append(Path(name).name)
+        pv = src / "preview.json"
+        if pv.exists() and "post.txt" not in written:
+            view = json.loads(pv.read_text(encoding="utf-8"))
+            (dest / "post.txt").write_text(view.get("text", ""), encoding="utf-8")
+            alts = [f"{s['file']}\n{s['alt']}" for s in view.get("slides", []) if s.get("file") and s.get("alt")]
+            written.append("post.txt")
+            if alts:
+                (dest / "alt-texts.txt").write_text("\n\n".join(alts) + "\n", encoding="utf-8")
+                written.append("alt-texts.txt")
+    stamp = {"piece": piece_id, "project": p.slug, "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+             "renders": {t: m["at"] for t, m in newest.items()}, "files": written}
+    (dest / MARKER).write_text(json.dumps(stamp, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"folder": str(dest), "files": written, "renders": sorted(newest)}
 
 
 def summary(project: config.Project | None = None) -> list[dict]:

@@ -64,6 +64,31 @@ sb piece add "Working title" --kind post --template <id>     # kinds: post, note
 - Put the prompt you were given into the card (`sb piece set <id> --prompt "..."`) so the piece
   can be redone.
 
+## From one file to a post, in conversation
+
+The user points at a file ("make a LinkedIn post about X.pdf") and then steers by message
+("change the chart on slide 2", "shorter first line", "open it"). The loop:
+
+1. `sb doc FILE --title "..." --publisher "..."` (once), read it with `sb source W-xxxx`.
+   If the file is the desk's own work (a publisher under `own.publishers` in project.yaml, e.g.
+   one's own study) and `self_citation: false`, it is where you find the facts, not what you
+   cite: register and cite the original sources it names (`sb snap URL`, `sb doc`). Cite the
+   own work only when the user says so, then `sb piece set ID --self-citation true`.
+2. `sb piece add "Working title" --kind post` (template and design come from `piece_defaults`),
+   then `text.md` and `slides.yaml` as in section 3, `sb piece check`, `sb render`.
+3. Every render of a piece brings it up in an open web view (Post preview); `sb piece open ID`
+   does the same without rendering. If no web view runs, say so: the desktop icon starts it.
+4. A requested change: edit the content (`text.md`, `slides.yaml`), render again, say in one
+   line what changed. A change of the *look* of this one piece (spacing, sizes, emphasis) goes
+   into `pieces/<id>/style/style.css` (rules laid over the template's CSS: colours as
+   `var(--c-…)`/`var(--p-…)`, fonts as `var(--f-…)`; nothing loaded from the web) and
+   `pieces/<id>/style/style.yaml` (only `scale`, `empty_warn_pct`). Never edit the registered
+   template or the design for one piece; a change every piece needs is a template change, which
+   the user asks for separately.
+5. When the user wants the files: `sb piece export ID` copies the newest renders, `post.txt` and
+   the alt texts to `export.dir` of the desk (a folder `YYYYMMDD_slug`). It posts nothing and
+   never deletes what it did not write.
+
 ## 4. Check, render, look
 
 ```sh

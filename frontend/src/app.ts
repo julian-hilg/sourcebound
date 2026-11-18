@@ -23,17 +23,20 @@ const tabs = (id: string, size: number, panels: string[], selectedId = panels[0]
 /** Panels of one workspace share the selected project, hypothesis, claim, result, piece and lake table. */
 const links = { "1": { project: null, hypothesis: null, claim: null, result: null, piece: null, table: null } };
 const linked = (...toolIds: string[]) => toolIds.map((toolId) => ({ id: `${toolId}-1`, toolId, link: "1" }));
+/** Every preset starts with the roomier rows; the person can switch to compact (Settings, Appearance). */
+const shell = { density: "comfortable" as const };
 
 /** One study: the list of projects, where the chosen one stands, its evidence and its paper. */
 const study: WorkspaceSeed = {
   name: "default",
   links,
+  shell,
   instances: [...linked("projects", "project", "deliverable", "evidence"), { id: "chat-1", toolId: "chat" }],
   layout: {
     root: split("root", "horizontal", 100, [
-      split("left", "vertical", 30, [tabs("left-top", 30, ["projects-1"]), tabs("left-bottom", 70, ["project-1"])]),
-      tabs("centre", 42, ["deliverable-1"]),
-      tabs("right", 28, ["evidence-1", "chat-1"]),
+      split("left", "vertical", 27, [tabs("left-top", 30, ["projects-1"]), tabs("left-bottom", 70, ["project-1"])]),
+      tabs("centre", 50, ["deliverable-1"]),
+      tabs("right", 23, ["evidence-1", "chat-1"]),
     ]),
   },
 };
@@ -42,6 +45,7 @@ const study: WorkspaceSeed = {
 const overview: WorkspaceSeed = {
   name: "Overview",
   links,
+  shell,
   instances: [...linked("projects", "project"), { id: "chat-1", toolId: "chat" }],
   layout: {
     root: split("root", "horizontal", 100, [tabs("left", 55, ["projects-1"]), tabs("right", 45, ["project-1", "chat-1"])]),
@@ -52,6 +56,7 @@ const overview: WorkspaceSeed = {
 const evidence: WorkspaceSeed = {
   name: "Evidence",
   links,
+  shell,
   instances: linked("projects", "evidence", "project"),
   layout: {
     root: split("root", "horizontal", 100, [
@@ -65,6 +70,7 @@ const evidence: WorkspaceSeed = {
 const reading: WorkspaceSeed = {
   name: "Reading",
   links,
+  shell,
   instances: [...linked("deliverable", "evidence"), { id: "chat-1", toolId: "chat" }],
   layout: {
     root: split("root", "horizontal", 100, [tabs("left", 60, ["deliverable-1"]), tabs("right", 40, ["evidence-1", "chat-1"])]),
@@ -75,6 +81,7 @@ const reading: WorkspaceSeed = {
 const desk: WorkspaceSeed = {
   name: "Desk",
   links,
+  shell,
   instances: [...linked("projects", "pieces", "project"), { id: "chat-1", toolId: "chat" }],
   layout: {
     root: split("root", "horizontal", 100, [
@@ -88,6 +95,7 @@ const desk: WorkspaceSeed = {
 const data: WorkspaceSeed = {
   name: "Data",
   links,
+  shell,
   instances: linked("lake", "sql", "sources"),
   layout: {
     root: split("root", "horizontal", 100, [
@@ -101,6 +109,7 @@ const data: WorkspaceSeed = {
 const system: WorkspaceSeed = {
   name: "System",
   links,
+  shell,
   instances: linked("system", "sources"),
   layout: {
     root: split("root", "horizontal", 100, [tabs("left", 55, ["system-1"]), tabs("right", 45, ["sources-1"])]),
@@ -128,7 +137,7 @@ Related views are tabs of one panel, so a workspace needs few panels.
 | Projects | every project with kind, phase, gates and counts | \`project.yaml\` of each project |
 | Project | *Overview*: phases and gates of a study, or topic and pieces of a desk, and the log. *Documents*: brief, landscape, notes. *Check*: what \`sb check\` and \`sb review-edits\` report. *Agents*: what Claude Code sessions and subagents are doing | \`project.yaml\`, \`log.md\`, \`research/\`, \`<data root>/activity/events.jsonl\` |
 | Evidence | *Hypotheses*, *Claims*, *Results*: the ledger and the recorded numbers. *Reviews*: verification and referee reports | \`hypotheses.yaml\`, \`evidence/\`, \`results/results.json\`, \`reviews/\` |
-| Deliverable | *Read*: a paper rendered from the handover. *All and planned*: what is written and what is wanted | \`dist/handover/\`, \`deliverables/\` |
+| Deliverable | *Read*: a deliverable as *Text* (rendered from the handover), as *PDF* (the LaTeX build) or as each render, such as *Word · template* (shown as it prints; the file is one click away). *All and planned*: what is written and what is wanted | \`dist/handover/\`, \`deliverables/\`, \`dist/render/\` |
 | Pieces | the list of pieces beside *Text* (text, card, checks, renders, decisions), *Post preview* (a render as a feed shows it) and *Schedule* | \`pieces/\` |
 | Lake | tables with contract, columns, rows and snapshots | the catalog of the data root |
 | SQL console | one read-only statement against the lake or a registered database | \`sb sql\` |
@@ -155,7 +164,7 @@ The *Lake* panel lists every table with its contract: what a row is, the key, th
 
 ## The deliverable reader
 
-The reader shows a deliverable without LaTeX, from the handover that \`sb handover\` writes. A number with a dotted line is a recorded result: hover for the script, commit and data snapshot behind it; click to select it under *Evidence*, *Results*. A number shown as \`?key\` is used in the text but was never recorded. A section marked *edited by a person* changed since the last agent commit.
+The reader shows a deliverable without LaTeX, from the handover that \`sb handover\` writes. Citations are numbered, as in the Word renders (Settings, Reader: author and year as in the PDF). A number with a dotted line is a recorded result: hover for the script, commit and data snapshot behind it; click to select it under *Evidence*, *Results*. A number shown as \`?key\` is used in the text but was never recorded. A section marked *edited by a person* changed since the last agent commit.
 
 ## Agents
 
@@ -176,6 +185,8 @@ export const werkbank = new Werkbank({
   appId: "sourcebound",
   title: "Sourcebound",
   logo: "/logo.svg",
+  // The first is the default: the app's own reading themes (theme.css), then the framework's.
+  themes: ["sourcebound", "sourcebound-dark", "light", "dark", "xp"],
   version: "0.1.0",
   docs: [{ id: "sourcebound", title: "Using Sourcebound", text: ABOUT }],
   tools: [projectsTool, projectHub, evidenceHub, deliverableHub, piecesHub, lakeTool, sqlTool, sourcesHub, systemHub, chatTool],

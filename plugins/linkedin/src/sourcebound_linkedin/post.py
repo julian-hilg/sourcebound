@@ -186,10 +186,14 @@ def bundle(piece_id: str, *, template: str | None = None, out: str | None = None
     pv = json.loads((src / "preview.json").read_text(encoding="utf-8"))
     if not any(s["file"] for s in pv["slides"]):
         raise FileNotFoundError("the render has no images (no Chromium was found when it ran): install Chrome or Edge and render again")
-    dest = Path(out).expanduser().resolve() if out else src / "post"
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    if out:                                         # a folder of the person's: replaced only if an earlier bundle of this piece wrote it
+        dest = Path(out).expanduser().resolve()
+        pieces.prepare_export(dest, piece_id)
+    else:                                           # inside the render folder, which belongs to the render
+        dest = src / "post"
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True)
     (dest / "post.txt").write_text(pv["text"], encoding="utf-8")
     names = [s["file"] for s in pv["slides"] if s["file"]]
     for name in [*names, pv["document"]]:
@@ -201,4 +205,7 @@ def bundle(piece_id: str, *, template: str | None = None, out: str | None = None
     (dest / "README.txt").write_text(steps(lang, pdf=pv["document"], first=names[0], last=names[-1], piece=piece_id, chars=pv["characters"],
                                            limit=pv["limit"], n=len(names), template=m["template"], design=m["design"], at=m["at"]),
                                      encoding="utf-8")
+    if out:
+        files = sorted(x.name for x in dest.iterdir() if x.is_file() and x.name != pieces.MARKER)
+        (dest / pieces.MARKER).write_text(json.dumps({"piece": piece_id, "files": files}, indent=1) + "\n", encoding="utf-8")
     return dest

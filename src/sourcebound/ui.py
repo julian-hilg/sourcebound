@@ -4,12 +4,14 @@
     GET  /api/projects                       every project: phase, gates, counts, last activity
     GET  /api/projects/<id>                  one project: card, hypotheses, claims, results, reviews, log, notes
     GET  /api/projects/<id>/file?path=..     one text file of the project (research/, reviews/, log.md, ...)
-    GET  /api/projects/<id>/raw?path=..      a figure or PDF (a PDF figure as PNG with &as=png)
+    GET  /api/projects/<id>/raw?path=..      a figure or PDF (a PDF figure as PNG with &as=png, a .docx/.pptx as PDF with &as=pdf)
     GET  /api/projects/<id>/handover         dist/handover: sections, results, tables, references
     POST /api/projects/<id>/run              {command: check | review-edits | handover}  -> runs `sb <command>`
     POST /api/projects/<id>/notes            {op: add | set | rm | put, ...}             -> what `sb note` does
+    POST /api/projects/<id>/render           {deliverable, template, design?}            -> what `sb render deliverables/..` does
     GET  /api/fetch                          fetch log and stopped hosts per source
     GET  /api/activity                       what the agents are doing (hook events)
+    GET  /api/focus                          the piece to show (`sb piece open`, the last render of a piece)
     GET  /api/workspace                      a VS Code workspace of all projects;  POST writes it (`sb workspace`)
     GET  /api/system                         what is installed and configured (`sb doctor --json`)
     GET  /api/lake                           tables of the data lake with their contracts, and snapshots
@@ -47,7 +49,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import yaml
 
-from . import __version__, activity, config, deliverable, ledger, notes, render, results
+from . import __version__, activity, config, deliverable, ledger, notes, office, render, results
 from .handover import _group, to_markdown
 
 PHASES = ["brief", "landscape", "hypotheses", "data", "analysis", "review", "deliverables", "published"]
@@ -56,7 +58,7 @@ TEXT = {".md", ".yaml", ".yml", ".json", ".csv", ".txt", ".py"}
 TEXT_ROOTS = ("research/", "reviews/", "evidence/", "analysis/", "dist/handover/", "pieces/", "log.md", "README.md", "AGENTS.md",
               "hypotheses.yaml", "project.yaml")
 TEXT = TEXT | {".html"}
-RAW = {".png", ".svg", ".jpg", ".jpeg", ".pdf", ".docx", ".html"}
+RAW = {".png", ".svg", ".jpg", ".jpeg", ".pdf", ".docx", ".pptx", ".html"}
 RAW_ROOTS = ("figures/", "deliverables/", "dist/handover/", "dist/render/", "pieces/")
 LOCAL = re.compile(r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$")
 PORT = 5210
@@ -265,13 +267,19 @@ def text_file(pid: str, rel: str) -> dict:
             "text": f.read_text(encoding="utf-8", errors="replace")}
 
 
-def raw_file(pid: str, rel: str, as_png: bool) -> tuple[bytes, str]:
-    """A figure or PDF; a PDF as PNG where a converter is installed (browsers do not show PDF images)."""
+def raw_file(pid: str, rel: str, as_: str | None = None) -> tuple[bytes, str]:
+    """A figure or PDF; a PDF as PNG where a converter is installed (browsers do not show PDF images);
+    a Word or PowerPoint render as PDF (`office.to_pdf`), so the web view can show it as it prints."""
     f = _inside(_project(pid), rel, RAW_ROOTS, RAW)
-    if as_png and f.suffix.lower() == ".pdf":
+    if as_ == "png" and f.suffix.lower() == ".pdf":
         png = _png(f)
         if png is not None:
             return png.read_bytes(), "image/png"
+    if as_ == "pdf" and f.suffix.lower() in office.SUFFIXES:
+        pdf = office.to_pdf(f)
+        if pdf is None:
+            raise NotFound(f"{f.name} cannot be shown as PDF here: install LibreOffice, or Microsoft Office on Windows")
+        return pdf.read_bytes(), "application/pdf"
     return f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream"
 
 
@@ -324,7 +332,7 @@ def handover(pid: str) -> dict:
     return {"built": True, **_handover_state(p), "handover": doc, "sections": sections, "results": res,
             "tables": tables, "references": bib, "web_sources": web, "edited_by_person": edited,
             "figures": sorted(f.name for f in (out / "figures").glob("*")) if (out / "figures").is_dir() else [],
-            "pdf_as_png": pdf_as_png()}
+            "pdf_as_png": pdf_as_png(), "office_as_pdf": office.available()}
 
 
 # ------------------------------------------------------------------ actions (what the command line does)
@@ -337,6 +345,18 @@ def run(pid: str, command: str) -> dict:
     return {"command": "sb " + " ".join(RUN[command]), "project": pid, "exit_code": r.returncode,
             "output": (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip(),
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def render_deliverable(pid: str, body: dict) -> dict:
+    """What `sb render deliverables/<name> --template ID [--design ID]` does."""
+    p = _project(pid)
+    name = str(body.get("deliverable") or "")
+    if not name or "/" in name or "\\" in name or not (p.root / "deliverables" / name).is_dir():
+        raise ValueError(f"no deliverable {name!r} in {pid}")
+    try:
+        return {"render": render.render(f"deliverables/{name}", str(body.get("template") or ""), design_id=body.get("design") or None, project=p)}
+    except (RuntimeError, FileNotFoundError) as e:
+        raise ValueError(str(e))
 
 
 def note(pid: str, body: dict) -> dict:
@@ -360,7 +380,9 @@ def pieces_of(pid: str) -> dict:
     from . import assets, pieces
     p = _project(pid)
     preview = p.meta.get("preview") if isinstance(p.meta.get("preview"), dict) else {}
+    export = p.meta.get("export") if isinstance(p.meta.get("export"), dict) else {}
     return {"project": pid, "statuses": pieces.STATUS, "defaults": p.meta.get("piece_defaults") or {},
+            "export_dir": str(export.get("dir") or "") or None,
             "preview": {k: str(preview[k]) for k in ("author", "headline") if preview.get(k)},
             "pieces": pieces.summary(p),
             "templates": [t for t in assets.templates() if not t["for"] or "piece" in t["for"]]}
@@ -388,7 +410,9 @@ def piece(pid: str, body: dict) -> dict:
             return {"render": render.render(piece_id, str(body.get("template") or ""), design_id=body.get("design") or None, project=p)}
         except (RuntimeError, FileNotFoundError) as e:
             raise ValueError(str(e))
-    raise ValueError("op must be add, set, rm, restore, check or render")
+    if op == "export":
+        return {"export": pieces.export(piece_id, p)}
+    raise ValueError("op must be add, set, rm, restore, check, render or export")
 
 
 def lake_overview() -> dict:
@@ -604,7 +628,7 @@ class Handler(BaseHTTPRequestHandler):
                 case ("GET", "projects", pid, "file"):
                     self._json(text_file(pid, q.get("path", "")))
                 case ("GET", "projects", pid, "raw"):
-                    data, ctype = raw_file(pid, q.get("path", ""), q.get("as") == "png")
+                    data, ctype = raw_file(pid, q.get("path", ""), q.get("as"))
                     self._send(200, data, ctype)
                 case ("GET", "projects", pid, "handover"):
                     self._json(handover(pid))
@@ -612,6 +636,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(run(pid, str(body.get("command"))))
                 case ("POST", "projects", pid, "notes"):
                     self._json(note(pid, body))
+                case ("POST", "projects", pid, "render"):
+                    self._json(render_deliverable(pid, body))
                 case ("GET", "projects", pid, "pieces"):
                     self._json(pieces_of(pid))
                 case ("POST", "projects", pid, "pieces"):
@@ -641,6 +667,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(fetch_log())
                 case ("GET", "activity"):
                     self._json({"log": str(activity.log_path()), "events": activity.tail(int(q.get("limit", 300)))})
+                case ("GET", "focus"):
+                    from . import pieces
+                    self._json({"focus": pieces.current_focus()})
                 case ("GET", "workspace"):
                     self._json({"path": str(workspace_path()), "workspace": workspace()})
                 case ("POST", "workspace"):
@@ -782,6 +811,12 @@ class Server(ThreadingHTTPServer):
         if sys.platform == "win32":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
+
+    def handle_error(self, request, client_address):
+        # a browser that drops a kept-alive connection (tab closed, reload) is not an error
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def running(port: int = PORT) -> dict | None:

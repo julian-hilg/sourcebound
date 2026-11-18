@@ -130,6 +130,57 @@ preview: {author: "Example GmbH", headline: "Asset management"}
 
 Without it, the preview uses the name under Settings, Post preview.
 
+### One's own work as a source
+
+A desk that writes for an organisation names its publishers; with `self_citation: false` a
+piece must cite the original sources, not the organisation's own study or report:
+
+```yaml
+own: {publishers: ["Example GmbH"]}
+self_citation: false
+```
+
+`sb piece check` then reports a citation of a source by such a publisher as an error. Where the
+person asks for it, `sb piece set ID --self-citation true` allows it for that piece.
+
+### Export to a folder
+
+`sb piece export ID` copies a piece to where the person keeps such files, for example a shared
+marketing folder: the newest render of every template (images, PDF, Word, PowerPoint), the post
+text as `post.txt` and the alternative texts. The folder is set per desk:
+
+```yaml
+export:
+  dir: "U:/Marketing/LinkedIn"     # must exist
+  name: "{date}_{slug}"            # {date}: planned posting day, else today (YYYYMMDD); {slug}; {id}
+```
+
+`--to FOLDER` exports into another folder. An export writes `.sourcebound-export.json` with the
+files it wrote; exporting again replaces only those. A folder that an export of this piece did
+not write is refused, so an export never deletes anything else. The web view has the same
+action (*Output*, *Export to folder*).
+
+### One piece's own look
+
+A piece may adjust the look of its own render without touching the registered template:
+
+```text
+pieces/<id>/style/style.css     rules laid over the template's CSS (slides templates)
+pieces/<id>/style/style.yaml    scale, empty_warn_pct (nothing else)
+```
+
+The design still applies: colours as `var(--c-…)` or `var(--p-…)` (the layout check refuses a
+colour the design does not have), typefaces only as `var(--f-…)`, nothing loaded from the web.
+`render.json` lists the style files used. A change every piece needs belongs in the template.
+
+### Following a piece in the web view
+
+Every render of a piece, and `sb piece open ID`, writes `<data root>/activity/focus.json`. An
+open web view then selects that project and piece and shows its post preview (in the desk
+workspace if the current one has no Pieces panel). An agent that changes a post on request and
+renders it again therefore shows the change at once. Settings, Pieces, *Show what an agent
+works on* turns this off.
+
 ## Formats: renderers, templates, designs, packs
 
 | Thing | Where | What it is |

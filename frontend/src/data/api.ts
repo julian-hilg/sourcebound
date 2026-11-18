@@ -169,11 +169,14 @@ export const paths = {
   project: (id: string) => `/api/projects/${enc(id)}`,
   handover: (id: string) => `/api/projects/${enc(id)}/handover`,
   file: (id: string, path: string) => `/api/projects/${enc(id)}/file?path=${enc(path)}`,
-  raw: (id: string, path: string, png = false) => `/api/projects/${enc(id)}/raw?path=${enc(path)}${png ? "&as=png" : ""}`,
+  /** A file of the project; `true` or "png": a PDF figure as an image; "pdf": a Word or PowerPoint file as PDF. */
+  raw: (id: string, path: string, as: boolean | "png" | "pdf" = false) => `/api/projects/${enc(id)}/raw?path=${enc(path)}${as ? `&as=${as === true ? "png" : as}` : ""}`,
+  render: (id: string) => `/api/projects/${enc(id)}/render`,
   run: (id: string) => `/api/projects/${enc(id)}/run`,
   notes: (id: string) => `/api/projects/${enc(id)}/notes`,
   fetch: "/api/fetch",
   activity: "/api/activity",
+  focus: "/api/focus",
   workspace: "/api/workspace",
   system: "/api/system",
   lake: "/api/lake",
@@ -394,6 +397,8 @@ export interface Handover extends HandoverState {
   figures?: string[];
   /** The service can turn a PDF figure into an image (pdftoppm or sips); else the page shows the PDF itself. */
   pdf_as_png?: boolean;
+  /** How the service shows a Word or PowerPoint render as PDF ("libreoffice", "word"), or null if it cannot. */
+  office_as_pdf?: string | null;
 }
 
 export interface FetchEntry {
@@ -685,6 +690,8 @@ export interface Pieces {
   defaults: { template?: string; design?: string };
   /** Who posts this desk's pieces, from `preview:` in project.yaml (e.g. an organisation's page). */
   preview?: { author?: string; headline?: string };
+  /** Where `sb piece export` copies a piece (`export.dir` in project.yaml), or null. */
+  export_dir?: string | null;
   pieces: Piece[];
   templates: Template[];
 }

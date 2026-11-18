@@ -103,6 +103,8 @@ of a tool comes only from dragging the tool into the layout (the owner's rule, 2
 - Import only from `@werkbank/framework`, `@werkbank/framework/styles.css` and `@werkbank/bridge`,
   never from a path inside those packages.
 - Colours come from the `--wb-*` theme tokens; no literal colours in components, `app.css` or `kit.css`.
+  The one exception is `src/theme.css`: the app's own themes (`sourcebound`, the default, and
+  `sourcebound-dark`), each a block of those tokens, listed first in `themes` in `app.ts`.
   A colour that is data (a design's palette in the Assets panel) is passed as a value.
 - Dropdowns and search fields are the framework's `Select`, `MultiSelect` and `SearchBox`, never native ones;
   no native date pickers either.

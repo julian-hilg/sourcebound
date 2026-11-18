@@ -36,6 +36,20 @@ piece_defaults:
   template: ""
   design: ""
 
+# Who "we" are: with self_citation: false, `sb piece check` refuses a citation of a source by
+# these publishers (one's own study or report); a piece cites the original sources instead,
+# unless the person asks for it (`sb piece set ID --self-citation true`).
+# own:
+#   publishers: []
+# self_citation: false
+
+# Where `sb piece export ID` copies a piece's files (render, post text, alt texts), e.g. a shared
+# marketing folder; each export is a folder named after `name` ({{date}}: the planned posting day,
+# else today, as YYYYMMDD; {{slug}}: the piece id without its date; {{id}}: the id).
+# export:
+#   dir: ""
+#   name: "{{date}}_{{slug}}"
+
 # Who posts the pieces, as the post preview of the web view shows it (e.g. an organisation's page);
 # without it the preview uses the name under Settings -> Post preview.
 # preview:

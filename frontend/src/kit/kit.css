@@ -120,7 +120,7 @@
 .kit-kv {
   margin: 0;
   display: grid;
-  grid-template-columns: minmax(84px, max-content) 1fr;
+  grid-template-columns: minmax(84px, min(max-content, 13em)) minmax(0, 1fr);
   gap: 4px 12px;
   line-height: 1.4;
 }

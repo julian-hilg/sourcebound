@@ -146,8 +146,12 @@ def build_html(doc, template: dict, design: dict) -> tuple[str, dict, list[str]]
     prefix = ((design.get("text") or {}).get("source_prefix") or {}).get(lang, "Source: ")
     logo, inverse = _logo(design, "file"), _logo(design, "file_inverse")
     env = Environment(autoescape=True, undefined=ChainableUndefined)      # a missing optional field is empty, not an error
+    css = _file(template, "css", "slides.css")
+    own = (template.get("piece_style") or {}).get("css")
+    if own:                     # the piece's own adjustments (pieces/<id>/style/style.css), after the template's rules
+        css += f"\n\n/* ---- pieces/{doc.name}/style/style.css ---- */\n" + own.replace("</", "<\\/")
     html = env.from_string(_file(template, "html", "slides.html.j2")).render(
-        deck=d, slides=prepared["slides"], tokens_css=Markup(css_tokens), css=Markup(_file(template, "css", "slides.css")),
+        deck=d, slides=prepared["slides"], tokens_css=Markup(css_tokens), css=Markup(css),
         layout_js=Markup(_file(template, "layout", "layout.js")),
         config_json=Markup(json.dumps(config).replace("</", "<\\/")), source_prefix=prefix,
         logo=Markup(logo), logo_inverse=Markup(inverse or logo), logo_needs_invert=bool(logo and not inverse),

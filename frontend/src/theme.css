@@ -1,0 +1,66 @@
+/*
+ * The app's own themes. A theme is one block of the framework's --wb-* tokens, so this is the one
+ * file of the app with literal colours: everything else (app.css, kit.css, components) uses the
+ * tokens. Listed first in `themes` (app.ts), "sourcebound" is the default.
+ *
+ * Made for reading: a larger type size, text colours with a contrast of at least 7:1 (dimmed text
+ * at least 4.5:1) on the canvas, calm chrome, and a softer accent than the framework's light theme.
+ */
+
+:root[data-theme="sourcebound"] {
+  color-scheme: light;
+  --wb-font: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  --wb-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --wb-font-size: 14px;
+  --wb-chrome: #eef0f3;
+  --wb-face: #f6f7f9;
+  --wb-canvas: #ffffff;
+  --wb-canvas-alt: #f6f7f9;
+  --wb-text: #1b1f24;
+  --wb-text-dim: #555d69;
+  --wb-border: #cfd4db;
+  --wb-grid: #e4e7eb;
+  --wb-accent: #2357b5;
+  --wb-accent-text: #ffffff;
+  --wb-hover: #e8edf6;
+  --wb-bevel-hi: #cfd4db;
+  --wb-bevel-lo: #cfd4db;
+  --wb-radius: 5px;
+  --wb-shadow: 0 8px 28px rgba(20, 24, 32, 0.16);
+  --wb-warn: #8f5200;
+  --wb-good: #00796d;
+  --wb-bad: #b8331b;
+  --wb-link-1: #b86f00;
+  --wb-link-2: #2357b5;
+  --wb-link-3: #1b7336;
+  --wb-link-4: #7338b5;
+}
+
+:root[data-theme="sourcebound-dark"] {
+  color-scheme: dark;
+  --wb-font: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  --wb-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --wb-font-size: 14px;
+  --wb-chrome: #16181c;
+  --wb-face: #1c1f24;
+  --wb-canvas: #121418;
+  --wb-canvas-alt: #181b20;
+  --wb-text: #e3e6eb;
+  --wb-text-dim: #a0a7b2;
+  --wb-border: #31353d;
+  --wb-grid: #262a31;
+  --wb-accent: #7aa9f5;
+  --wb-accent-text: #0c1320;
+  --wb-hover: #262a31;
+  --wb-bevel-hi: #31353d;
+  --wb-bevel-lo: #31353d;
+  --wb-radius: 5px;
+  --wb-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  --wb-warn: #f0b75a;
+  --wb-good: #2fb3a5;
+  --wb-bad: #ec6a4a;
+  --wb-link-1: #f0b75a;
+  --wb-link-2: #7aa9f5;
+  --wb-link-3: #67cf87;
+  --wb-link-4: #c493f5;
+}
