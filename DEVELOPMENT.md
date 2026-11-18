@@ -107,6 +107,30 @@ Add the package under `plugins/`, an extra and a `[tool.uv.sources]` entry in th
 `pyproject.toml`, and tests under `plugins/<name>/tests/` that start with
 `pytest.importorskip("<package>")`.
 
+### Toolkits: an organisation's own code
+
+An organisation often has its own code base with a Python environment, database access and agent
+skills (charts in its house style, report builders, data extracts). A private plugin names it as
+a toolkit (`api.toolkit(name, find=..., skills=..., env=..., checks=...)`, see
+`src/sourcebound/toolkits.py`); Sourcebound finds and checks it (`sb toolkit list|check`,
+`sb doctor`) and runs its scripts in its own environment (`sb toolkit run NAME skill:<id>/x.py`).
+Skills are not copied: agents read them where they live. A pack names what it works with under
+`requires:` in pack.yaml (`plugins`, `toolkits`, `skills` as `<claude-plugin>:<skill>`), and
+`sb pack install` reports each. Never let a toolkit's script run in Sourcebound's environment:
+`toolkits.run` sets `UV_PROJECT_ENVIRONMENT` and `VIRTUAL_ENV` to the toolkit's.
+
+## Figures on slides (2026-11-18)
+
+- **Done:** `image` blocks (a picture in the piece's folder), `floats` (number boxes over any
+  exhibit, checked against bars, labels and, on pictures, against drawn pixels except grid
+  lines), `sb figure crop` (a region of a registered PDF, white margin trimmed), the same in the
+  PowerPoint plugin (picture placed as it is, floats as boxes and text).
+- **Next:** bars and columns with negative values (diverging around zero; today `value` must be
+  0 or more, so outflows need a picture or two groups); floats placed automatically in the
+  largest empty area of a chart when `x`/`y` are left out; floats in Word figures; a line chart
+  that checks lines against labels; `sb figure new|render|list` for figures of their own in a
+  project (planned beside `crop`).
+
 ## The web view
 
 Rules and layout are in [`frontend/AGENTS.md`](frontend/AGENTS.md). In short: the frontend

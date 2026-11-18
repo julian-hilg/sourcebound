@@ -71,7 +71,14 @@
     var box = host(block), f = free(box), c;
     if (f < 8) return;
     var start = f;
-    if ((c = box.querySelector(".bars"))) {
+    if ((c = box.querySelector(".figure .pic"))) {          // a picture: larger, keeping its proportions
+      var img = c.querySelector("img"), ratio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0;
+      var ph = c.getBoundingClientRect().height, wmax = c.parentNode.getBoundingClientRect().width;
+      if (ratio) {
+        var hh = Math.min(ph + f, wmax / ratio);
+        c.style.height = hh.toFixed(1) + "px"; c.style.width = (hh * ratio).toFixed(1) + "px";
+      }
+    } else if ((c = box.querySelector(".bars"))) {
       taller(Array.prototype.slice.call(c.querySelectorAll(".row")), f, ROW_MAX, function (r) { return [r.querySelector(".track"), r.querySelector(".bar")]; });
     } else if ((c = box.querySelector(".gantt"))) {
       taller(Array.prototype.slice.call(c.querySelectorAll(".r")), f, ROW_MAX, function (r) { return Array.prototype.slice.call(r.querySelectorAll(".seg:not(.ext)")); });
@@ -270,6 +277,49 @@
     return "#" + p.slice(0, 3).map(function (n) { return ("0" + Math.round(n).toString(16)).slice(-2); }).join("");
   }
 
+  // What of a picture lies under a float. Pixels that differ from the picture's background (its
+  // corner colour) count, except those on grid lines: a sampled row or column that is drawn over
+  // most of its length is a line, and a float may sit on lines. Anything else (a bar, a label, a
+  // tick) under a float is a problem; `covered` returns the share of such samples.
+  var COVER_MIN_HITS = 3, LINE_MAX = 6;          // px on the slide: thicker than this is drawn content, not a grid line
+  function covered(img, r) {
+    if (!img.naturalWidth) return { hits: 0, share: 0 };
+    var box = rect(img), sx = img.naturalWidth / box.w, sy = img.naturalHeight / box.h;
+    var x0 = Math.max(0, (r.l - box.l) * sx), y0 = Math.max(0, (r.t - box.t) * sy);
+    var x1 = Math.min(img.naturalWidth, (r.r - box.l) * sx), y1 = Math.min(img.naturalHeight, (r.b - box.t) * sy);
+    if (x1 <= x0 || y1 <= y0) return { hits: 0, share: 0 };
+    var c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    var g = c.getContext("2d"), data;
+    try { g.drawImage(img, 0, 0); data = g.getImageData(0, 0, c.width, c.height).data; } catch (e) { return { hits: 0, share: 0 }; }
+    function at(x, y) { var i = (Math.floor(y) * c.width + Math.floor(x)) * 4; return [data[i], data[i + 1], data[i + 2]]; }
+    var bg = at(6, 6), step = Math.max(1, Math.min(x1 - x0, y1 - y0) / 90), grid = [];
+    for (var y = y0; y < y1; y += step) {
+      var row = [];
+      for (var x = x0; x < x1; x += step) {
+        var p = at(x, y);
+        row.push(Math.abs(p[0] - bg[0]) + Math.abs(p[1] - bg[1]) + Math.abs(p[2] - bg[2]) > 60);
+      }
+      grid.push(row);
+    }
+    var nr = grid.length, nc = grid[0].length, lineRow = [], lineCol = [], i, j, k;
+    for (i = 0; i < nr; i++) { for (k = 0, j = 0; j < nc; j++) k += grid[i][j]; lineRow.push(k > nc * 0.35); }
+    for (j = 0; j < nc; j++) { for (k = 0, i = 0; i < nr; i++) k += grid[i][j]; lineCol.push(k > nr * 0.35); }
+    // a line is thin: a run of such rows (columns) longer than LINE_MAX px is a bar, and counts
+    function thin(flags, pxPerSample) {
+      var out = flags.slice(), s = 0;
+      for (var e = 0; e <= flags.length; e++) {
+        if (e < flags.length && flags[e]) continue;
+        if ((e - s) * pxPerSample > LINE_MAX) for (var q = s; q < e; q++) out[q] = false;
+        s = e + 1;
+      }
+      return out;
+    }
+    lineRow = thin(lineRow, step / sy); lineCol = thin(lineCol, step / sx);
+    var hits = 0;
+    for (i = 0; i < nr; i++) for (j = 0; j < nc; j++) if (grid[i][j] && !lineRow[i] && !lineCol[j]) hits++;
+    return { hits: hits, share: hits / (nr * nc) };
+  }
+
   function measure(s) {
     var box = rect(s), seen = {};
     function once(el, what) { var key = slideOf(el) + "|" + what; if (!seen[key]) { seen[key] = 1; problem(el, what); } }
@@ -331,6 +381,15 @@
     Array.prototype.forEach.call(s.querySelectorAll("[data-block]"), function (block) {
       var labels = Array.prototype.filter.call(block.querySelectorAll("[data-label]"), function (l) { return getComputedStyle(l).display !== "none"; });
       var area = rect(block);
+      Array.prototype.forEach.call(block.querySelectorAll("[data-float]"), function (f) {   // a float stays on its chart or picture
+        var r = rect(f), on = rect(f.closest(".pic") || f.closest(".stage"));
+        if (r.l < on.l - 0.5 || r.r > on.r + 0.5 || r.t < on.t - 0.5 || r.b > on.b + 0.5) once(f, "the float “" + words(f) + "” reaches beyond its exhibit: lower `x`/`y`, or shorten `t`");
+        var img = f.closest(".pic") && f.closest(".pic").querySelector("img");
+        if (img) {
+          var cov = covered(img, r);
+          if (cov.hits >= COVER_MIN_HITS) once(f, "the float “" + words(f) + "” covers drawn parts of the picture (bars, labels or ticks, not only grid lines): move it to an empty area (`x`, `y`)");
+        }
+      });
       labels.forEach(function (l) {                                       // a label stays inside its own exhibit
         var r = ink(l);
         if (r.t < area.t - 0.5 || r.b > area.b + 0.5 || r.l < area.l - 0.5 || r.r > area.r + 0.5) once(l, "the label \u201c" + words(l) + "\u201d leaves its exhibit and runs into the rest of the slide");
@@ -341,16 +400,25 @@
           if (near(ink(labels[i]), ink(labels[j]), GAP - 0.5)) once(labels[i], "the labels “" + words(labels[i]) + "” and “" + words(labels[j]) + "” overlap or are closer than " + GAP + " px");
         }
         if (labels[i].classList.contains("in")) continue;                // deliberately inside its own bar
+        var isFloat = labels[i].hasAttribute("data-float");
         marks.forEach(function (m) {
+          if (isFloat && m.tagName === "IMG") return;                      // a float sits on its picture by design
           if (m.parentNode === labels[i].parentNode && !labels[i].classList.contains("wd")) return;   // a label next to its own mark
           var a = ink(labels[i]), b = rect(m);
-          if (b.w > 0 && b.h > 0 && near(a, b, 0) && m.parentNode !== labels[i].parentNode) once(labels[i], "the label “" + words(labels[i]) + "” lies on a bar");
+          if (b.w > 0 && b.h > 0 && near(isFloat ? rect(labels[i]) : a, b, 0) && m.parentNode !== labels[i].parentNode)
+            once(labels[i], isFloat ? "the float “" + words(labels[i]) + "” covers a bar or line: move it (`x`, `y`)" : "the label “" + words(labels[i]) + "” lies on a bar");
           if (labels[i].classList.contains("wd") && m.parentNode === labels[i].parentNode && near(a, b, 4)) once(labels[i], "the label “" + words(labels[i]) + "” touches its bar");
         });
       }
     });
   }
 
-  function start() { loadFaces().then(run, run); }
+  function pictures() {                       // every picture decoded, so its size is known before the layout
+    return Promise.all(Array.prototype.map.call(document.images, function (i) {
+      if (i.complete) return Promise.resolve();
+      return new Promise(function (done) { i.addEventListener("load", done); i.addEventListener("error", done); });
+    }));
+  }
+  function start() { Promise.all([loadFaces(), pictures()]).then(run, run); }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else run();
 })();

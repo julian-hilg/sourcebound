@@ -212,3 +212,18 @@ ol.src li span { display: block; font-size: 16px; color: var(--c-ink-faint); mar
 .comments .cm { border-top: 3px solid var(--c-accent); padding-top: 14px; min-width: 0; }
 .comments .ch { font-weight: var(--w-medium); font-size: 23px; color: var(--c-primary); margin-bottom: 6px; }
 .comments p { font-size: 22px; line-height: 1.45; color: var(--c-ink-soft); }
+
+/* ---- pictures and floating number boxes ---------------------------------------------------- */
+.stage { position: relative; }
+.figure { display: flex; justify-content: center; }
+.figure .pic { position: relative; max-width: 100%; }
+.figure .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.figure .pic[style*="height"] img { width: auto; max-width: 100%; }
+.fl { position: absolute; z-index: 2; background: var(--c-paper); border-left: 6px solid var(--c-accent);
+      padding: 14px 20px 14px 18px; max-width: 46%; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+.fl.a-center { transform: translateX(-50%); }
+.fl .fn { font-family: var(--f-heading); font-weight: var(--w-medium); font-size: 46px; line-height: 1; color: var(--c-primary); white-space: nowrap; }
+.fl .ft { font-weight: var(--w-light); font-size: 19px; line-height: 1.35; color: var(--c-ink-soft); margin-top: 8px; }
+.fl.hi { background: var(--c-primary); border-left-color: var(--c-accent); }
+.fl.hi .fn { color: var(--c-paper); }
+.fl.hi .ft { color: var(--c-on-primary-soft); }

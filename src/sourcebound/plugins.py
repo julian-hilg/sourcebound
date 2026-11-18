@@ -18,6 +18,7 @@ and a function `register(api)` that says what it brings:
         api.pack(Path(__file__).parent / "pack")         # optional: designs/ and templates/ it brings
         api.converter(".docx", ".pdf", to_pdf)           # optional: a format conversion for `sb deliver`
         api.chart_renderer("firm", draw)                 # optional: charts in an organisation's style (see charts.py)
+        api.toolkit("firm-lib", find=..., skills=...)    # optional: the organisation's own code and skills (see toolkits.py)
 
 A plugin that is not installed into the environment (a private one, kept in a shared folder) is
 named in the user configuration instead; `sb plugin add FOLDER` writes it there:
@@ -84,6 +85,7 @@ class Plugin:
     packs: list[str] = field(default_factory=list)
     converters: list[str] = field(default_factory=list)
     chart_renderers: list[str] = field(default_factory=list)
+    toolkits: list[str] = field(default_factory=list)
 
 
 class Api:
@@ -139,6 +141,13 @@ class Api:
         self._registry.chart_renderers[name] = ChartRenderer(name, fn, tuple(types), title, self._plugin.name)
         self._plugin.chart_renderers.append(name)
 
+    def toolkit(self, name: str, *, title: str = "", find=None, skills: str = "skills", env=None, python=None, checks=None) -> None:
+        """An organisation's own code checkout, with its environment and skills, that Sourcebound finds,
+        checks and runs scripts of without mixing environments (see `sourcebound.toolkits`)."""
+        from .toolkits import Toolkit
+        self._registry.toolkits[name] = Toolkit(name, title, find, skills, env, python, checks, self._plugin.name)
+        self._plugin.toolkits.append(name)
+
 
 @dataclass
 class Registry:
@@ -150,6 +159,7 @@ class Registry:
     packs: list = field(default_factory=list)
     converters: dict[tuple, Converter] = field(default_factory=dict)
     chart_renderers: dict[str, ChartRenderer] = field(default_factory=dict)
+    toolkits: dict = field(default_factory=dict)
 
 
 _REGISTRY: Registry | None = None
@@ -279,5 +289,5 @@ def _set_folders(change, folder, *, check: bool) -> list:
 def listing() -> list[dict]:
     return [{"name": p.name, "package": p.package, "version": p.version, "error": p.error,
              "renderers": p.renderers, "commands": p.commands, "packs": p.packs, "converters": p.converters,
-             "chart_renderers": p.chart_renderers}
+             "chart_renderers": p.chart_renderers, "toolkits": p.toolkits}
             for p in load().plugins]

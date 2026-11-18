@@ -54,6 +54,22 @@ as empty (see Checks).
 | `callout` | `n`, `text` |
 | `quote` | `text`, `by` |
 | `sources` | `items: [{text, where}]`, or `items: auto` for every source the piece cites |
+| `image` | `src` (a picture in the piece's folder: png, jpg, webp, svg), `alt` (what it shows, with its numbers), `from` (where it came from, e.g. `"W-0007, p. 4"`; a `W-` id must be registered), `height` (px) |
+
+**Pictures.** An `image` block shows a chart made elsewhere: drawn by a script in `analysis/`, by
+an organisation's own tools (a toolkit, `sb toolkit`), or cut out of a registered PDF with
+`sb figure crop W-xxxx --page N --box left,top,right,bottom` (percent of the page; `--grid` writes
+the page with a grid to read the box off; the white page margin is trimmed). It is an exhibit:
+the slide needs a `source:` line (or `source: false`). With `grow: true` the picture grows as far
+as its proportions allow; a wide chart on a portrait slide leaves room for a `comments` block below.
+
+**Floating number boxes.** Any exhibit (a chart, a table, a picture) takes `floats`: up to four
+boxes with a number over it, `{n, t, x, y, hi, align}`. `n` is the number, `t` one line on what it
+is, `x` and `y` place the box's top left corner in percent of the chart (of the picture for an
+image), `align: right` puts its right edge at `x`, `center` its middle; `hi: true` fills it in the
+primary colour. The render stops when a box leaves its exhibit, touches another label, or covers a
+bar, a value or a tick (on a picture: anything drawn except long grid lines). Move it to an empty
+area; never shrink the chart for it.
 
 `hi: true` marks the one series the title is about. A design with `charts.highlight_one` draws
 it in the primary colour and everything else in the neutral colour.

@@ -542,6 +542,11 @@ def cmd_doctor(a):
         warns.append("lead playbook not installed (sb install skill)")
     if config.find_up("hub.toml") is None and not list((claude / "agents").glob("sb-*.md")):
         warns.append("subagents not installed at user level (sb install agents); projects outside the checkout will not find them")
+    from . import toolkits
+    for name in sorted(toolkits.registered()):            # an organisation's code beside Sourcebound (a plugin names it)
+        st = toolkits.status(name)
+        print(f"{'toolkit ' + name:<17} " + (f"ok: {st.root} ({len(st.skills)} skills)" if st.ok else "not usable"))
+        warns += [f"toolkit {name}: {x}" for x in st.errors + st.warnings]
     for w in warns:
         print("warning:", w)
     for e in errs:
@@ -814,6 +819,36 @@ def cmd_source(a):
     print(f"{a.id}  {ledger.source_label(src)}\n      {where}  (accessed {src.get('accessed', '?')}, sha256 {src['sha256'][:12]})\n"
           + notice)
     _show_text(text, a, a.id)
+
+
+def cmd_figure(a):
+    """Figures for pieces. `sb figure crop W-0007 --page 4 --box 52,8,98,45 --out pieces/ID/figures/x.png`
+    cuts a chart out of a registered PDF; `--grid` writes the page with a 10 % grid to read the box off."""
+    from . import figures, ledger
+    from .fetch import read_raw
+    if a.what != "crop":
+        sys.exit(f"sb figure {a.what}: unknown (sb figure crop W-xxxx --page N --box l,t,r,b --out FILE)")
+    src = {s["id"]: s for s in ledger.load()["sources"]}.get(a.id)
+    if src is None or not src.get("sha256"):
+        sys.exit(f"{a.id}: not a registered source with an archived copy (sb doc FILE)")
+    if not str(src.get("raw", "")).endswith(".pdf.zst") and not str(src.get("file", "")).lower().endswith(".pdf"):
+        sys.exit(f"{a.id} is not a PDF: only a PDF page can be cropped")
+    body = read_raw("web", src["sha256"])
+    out = Path(a.out) if a.out else Path(f"{a.id}_p{a.page}" + ("_grid" if a.grid else "") + ".png")
+    try:
+        if a.grid:
+            w, h = figures.grid(body, a.page, out)
+            print(f"wrote {out} ({w} x {h} px): page {a.page} of {a.id} with a grid in percent of the page;\n"
+                  f"read the box off it and crop: sb figure crop {a.id} --page {a.page} --box left,top,right,bottom --out FILE")
+            return
+        if not a.box:
+            sys.exit("--box left,top,right,bottom (percent of the page) is needed; --grid shows the page with a grid to read it off")
+        w, h = figures.crop(body, a.page, figures.parse_box(a.box), out, dpi=a.dpi, trim=not a.no_trim)
+    except figures.CropError as e:
+        sys.exit(str(e))
+    print(f"wrote {out} ({w} x {h} px) from {a.id}, page {a.page}, box {a.box}")
+    print("   use it in slides.yaml (src relative to the piece folder):\n"
+          f"   - {{type: image, src: figures/{out.name}, alt: \"what the figure shows\", from: \"{a.id}, p. {a.page}\"}}")
 
 
 def databases_error():
@@ -1214,6 +1249,20 @@ def main(argv=None):
     for opt in ("title", "publisher", "author", "date"):
         s.add_argument(f"--{opt}", help="with `set`: the new value")
     s.set_defaults(f=cmd_source)
+    s = sub.add_parser("toolkit", help="an organisation's own code beside Sourcebound: list, check, skills, run (in its own environment)")
+    s.add_argument("what", choices=["list", "check", "skills", "run"]); s.add_argument("name", nargs="?")
+    s.add_argument("args", nargs=argparse.REMAINDER, help="with run: SCRIPT (skill:<id>/scripts/x.py, or a path in the checkout) and its arguments")
+    s.add_argument("--cwd", help="with run: the folder to run in (default: the checkout)")
+    s.set_defaults(f=lambda a: __import__("sourcebound.toolkits", fromlist=["cmd"]).cmd(a))
+    s = sub.add_parser("figure", help="figures for pieces: `sb figure crop W-xxxx --page N --box l,t,r,b --out FILE` cuts one out of a PDF")
+    fsub = s.add_subparsers(dest="what", required=True)
+    c = fsub.add_parser("crop", help="cut a region of a registered PDF's page into a PNG (the archived copy is read)")
+    c.add_argument("id", help="W-xxxx of a registered PDF"); c.add_argument("--page", type=int, required=True)
+    c.add_argument("--box", help="left,top,right,bottom in percent of the page")
+    c.add_argument("--grid", action="store_true", help="write the whole page with a 10 %% grid instead, to read the box off")
+    c.add_argument("--no-trim", action="store_true", help="keep the white page margin inside the box")
+    c.add_argument("--dpi", type=int, default=300); c.add_argument("--out", help="the PNG to write (e.g. pieces/ID/figures/name.png)")
+    c.set_defaults(f=cmd_figure)
     s = sub.add_parser("papers"); s.add_argument("what", choices=["sync", "convert", "status"])
     s.add_argument("--background", action="store_true", help="convert detached from this session")
     s.add_argument("--retry", action="store_true", help="also retry papers whose conversion failed")

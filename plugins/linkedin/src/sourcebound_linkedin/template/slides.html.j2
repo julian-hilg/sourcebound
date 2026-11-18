@@ -14,10 +14,18 @@
 {%- if b.name %}<div class="exhibit"><span class="name">{{ b.name }}</span>{% if b.unit %}<span class="unit">, {{ b.unit }}</span>{% endif %}</div>{% endif -%}
 {%- endmacro -%}
 
+{#- floating number boxes over an exhibit: x and y in percent of the chart (of the picture for an image) -#}
+{%- macro floats(b) -%}
+{%- for f in b.floats or [] %}<div class="fl{{ ' hi' if f.hi }} a-{{ f.align }}" data-label data-float style="{{ 'right:' ~ (100 - f.x) ~ '%' if f.align == 'right' else 'left:' ~ f.x ~ '%' }};top:{{ f.y }}%"><div class="fn">{{ f.n }}</div>{% if f.t %}<div class="ft">{{ f.t }}</div>{% endif %}</div>{% endfor -%}
+{%- endmacro -%}
+
 {%- macro block(b) -%}
 <div class="block{{ ' grow' if b.grow }}{{ ' push' if b.push }}" data-block="{{ b.type }}">
 {{ exhibit(b) }}
-{%- if b.type == "kpis" %}
+<div class="stage">
+{%- if b.type == "image" %}
+  <div class="figure"><div class="pic"{% if b.height %} style="height:{{ b.height }}px"{% endif %}><img data-mark src="{{ b.data }}" alt="{{ b.alt }}">{{ floats(b) }}</div></div>
+{%- elif b.type == "kpis" %}
   {#- at most three numbers side by side (four on a wide slide); four go in two rows of two -#}
   {%- set n = b['items']|length -%}
   {%- set cols = n if n <= 3 or (deck.width > deck.height and n <= 4) else (2 if n == 4 else 3) -%}
@@ -104,6 +112,8 @@
 {%- elif b.type == "sources" %}
   <ol class="src">{% for s in b['items'] %}<li><div>{{ s.text }}{% if s.where %}<span>{{ s.where }}</span>{% endif %}</div></li>{% endfor %}</ol>
 {%- endif %}
+{%- if b.type != "image" %}{{ floats(b) }}{% endif %}
+</div>
 </div>
 {%- endmacro -%}
 

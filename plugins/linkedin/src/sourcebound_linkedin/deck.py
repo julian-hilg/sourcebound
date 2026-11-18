@@ -39,7 +39,13 @@ BLOCKS: dict[str, tuple[tuple, str | None, tuple]] = {
     "callout": (("n", "text"), None, ()),
     "quote": (("text",), None, ()),
     "sources": ((), None, ()),
+    "image": (("src", "alt"), None, ()),
 }
+# Blocks that show a picture of data (an exhibit): they need a source line and may carry `floats`.
+EXHIBITS = {"kpis", "bars", "columns", "line", "gantt", "day", "windows", "table", "image"}
+IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+SOURCE_ID_RE = r"\bW-\d{4,}\b"
+SOURCE_ID = re.compile(SOURCE_ID_RE)
 
 
 def _walk(node, fn, key=None):
@@ -111,7 +117,7 @@ _KEEP = [
     (re.compile(r"(?<![\w])(Mrd\.|Mio\.|Tsd\.|Bio\.|bn|mn|tn)" + _SP + r"(?=(?:€|\$|£|EUR|USD|GBP|CHF|Euro)(?![\w]))"), r"\1" + NBSP),
     (re.compile(r"(?<![\w])(€|\$|£|EUR|USD|GBP|CHF)" + _SP + r"(?=[\d+\-−])"), r"\1" + NBSP),
 ]
-_NOT_TEXT = NUMERIC | {"type", "layout", "lang", "prefix", "align", "pct", "points"}
+_NOT_TEXT = NUMERIC | {"type", "layout", "lang", "prefix", "align", "pct", "points", "src", "x", "y"}
 
 
 def keep_together(s: str) -> str:
@@ -154,7 +160,7 @@ def problems(data: dict, doc, design: dict) -> list[str]:
         if not isinstance(blocks, list) or not blocks:
             out.append(f"{where}: needs `blocks`")
             continue
-        charts = [b for b in blocks if isinstance(b, dict) and b.get("type") not in {"comments", "sources", "bullets", "text", "quote", "callout"}]
+        charts = [b for b in blocks if isinstance(b, dict) and b.get("type") in EXHIBITS]
         only_sources = all(isinstance(b, dict) and b.get("type") == "sources" for b in blocks)
         if charts and not only_sources and "source" not in s:
             out.append(f"{where}: an exhibit needs a source line (`source: ...`, or `source: false` for the slide's own material)")
@@ -180,7 +186,56 @@ def problems(data: dict, doc, design: dict) -> list[str]:
                             out.append(f"{at}: every entry of `{listed}` needs `{f}`")
                             break
             out += [f"{at}: {x}" for x in _values(kind, b, design)]
+            if kind == "image":
+                out += [f"{at}: {x}" for x in _image(b, doc)]
+            out += [f"{at}: {x}" for x in _floats(kind, b)]
     return list(dict.fromkeys(out))
+
+
+def _image_file(b: dict, doc):
+    """The picture an image block names: a path relative to the piece's folder."""
+    folder = getattr(doc, "folder", None)
+    return (folder / str(b.get("src") or "")) if folder and b.get("src") else None
+
+
+def _image(b: dict, doc) -> list[str]:
+    out: list[str] = []
+    f = _image_file(b, doc)
+    if f is not None:
+        if f.suffix.lower() not in IMAGE_TYPES:
+            out.append(f"`src` must be a picture ({', '.join(sorted(IMAGE_TYPES))}), not {f.suffix or 'a file without extension'}")
+        elif not f.is_file():
+            out.append(f"`src` {b['src']} does not exist (a path relative to pieces/{doc.name}/; `sb figure crop` cuts one out of a PDF)")
+    for k in SOURCE_ID.findall(str(b.get("from") or "")):
+        if k not in (getattr(doc, "web_sources", None) or {}):
+            out.append(f"`from` names {k}, which is not registered (sb doc FILE, or sb snap URL)")
+    if b.get("height") is not None and not (_num(b["height"]) and 80 <= b["height"] <= 2000):
+        out.append("`height` is the picture's height in pixels (80 to 2000)")
+    return out
+
+
+def _floats(kind: str, b: dict) -> list[str]:
+    """Floating number boxes: a number (and a line of text) placed over an exhibit."""
+    fl = b.get("floats")
+    if fl is None:
+        return []
+    if kind not in EXHIBITS:
+        return ["`floats` go on an exhibit (a chart, a table or an image), not on " + kind]
+    if not isinstance(fl, list) or not fl:
+        return ["`floats` is a list of {n, t, x, y}"]
+    out: list[str] = []
+    if len(fl) > 4:
+        out.append("more than 4 floats hide the exhibit: keep the numbers that carry the message")
+    for f in fl:
+        if not isinstance(f, dict) or f.get("n") in (None, ""):
+            out.append("every float needs `n` (the number it shows)")
+            continue
+        for k in ("x", "y"):
+            if not (_num(f.get(k)) and 0 <= f[k] <= 100):
+                out.append(f"float “{f['n']}”: `{k}` is a position in percent of the exhibit (0 to 100)")
+        if f.get("align") not in (None, "left", "right", "center"):
+            out.append(f"float “{f['n']}”: `align` is left, right or center")
+    return out
 
 
 def _values(kind: str, b: dict, design: dict) -> list[str]:
@@ -339,11 +394,27 @@ def _block(b: dict, doc, deck: dict, german: bool, design: dict) -> dict:
         b.setdefault("columns", [])
     elif kind == "text":
         b["paragraphs"] = b.get("paragraphs") or [p for p in str(b.get("text", "")).split("\n\n") if p.strip()]
+    elif kind == "image":
+        f = _image_file(b, doc)
+        b["data"] = _picture(f) if f is not None and f.is_file() else ""
+        b["file"] = str(f) if f is not None and f.is_file() else ""          # for renderers that place the file (pptx)
+        b.setdefault("from", "")
     elif kind == "sources":
         if b.get("items") in (None, "auto"):
             keys = list(dict.fromkeys(render.cited(doc.text) + used_sources(doc.data.get("slides") or {})))
             b["items"] = [{"text": _source_item(k, doc), "where": _where(k, doc)} for k in keys]
+    for f in b.get("floats") or []:
+        f.setdefault("t", "")
+        f.setdefault("align", "left")
     return b
+
+
+def _picture(f) -> str:
+    """The picture as a data URI, so the page (and its frozen copy) holds it."""
+    import base64
+    import mimetypes
+    kind = mimetypes.guess_type(f.name)[0] or ("image/svg+xml" if f.suffix.lower() == ".svg" else "image/png")
+    return f"data:{kind};base64,{base64.b64encode(f.read_bytes()).decode('ascii')}"
 
 
 def _source_item(key: str, doc) -> str:
@@ -380,10 +451,14 @@ def alt_text(slide: dict) -> str:
             parts.append((name + ": " if name else "") + "; ".join(f"{w['label']} {w.get('dates', '')}".strip() for w in b["windows"]))
         elif b["type"] == "gantt":
             parts.append((name + ": " if name else "") + "; ".join(" ".join(x for x in (r.get("label"), r.get("sub")) if x) for r in b["rows"]))
+        elif b["type"] == "image":
+            parts.append((name + ": " if name else "") + str(b.get("alt") or ""))
         elif b["type"] == "comments":
             parts.append(" ".join(f"{c.get('head', '')}: {c['text']}".lstrip(": ") for c in b["items"]))
         elif name:
             parts.append(name)
+        if b.get("floats"):
+            parts.append("; ".join(f"{f['n']} {f.get('t', '')}".strip() for f in b["floats"]))
     if slide.get("layout") == "cover" and slide.get("sub"):
         parts.append(str(slide["sub"]))
     return re.sub(r"\s+", " ", ". ".join(p.strip().rstrip(".") for p in parts if p and p.strip())).strip() + "."

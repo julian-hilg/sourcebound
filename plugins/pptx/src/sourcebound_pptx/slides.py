@@ -30,7 +30,7 @@ from sourcebound_linkedin import deck as decks
 from . import master as m
 from .style import Measure, merged, missing
 
-EXHIBITS = {"kpis", "table", *charts.CHART_TYPES}
+EXHIBITS = {"kpis", "table", "image", *charts.CHART_TYPES}
 TEXT_BLOCKS = {"bullets", "text", "comments", "callout", "quote", "sources"}
 A = m.A
 
@@ -56,6 +56,7 @@ class Op:
     dash: bool = False
     block: dict | None = None                  # image: the chart block
     alt: str = ""
+    file: str = ""                             # image: a picture file placed as it is (an `image` block)
     role: str = ""                             # placeholder role
     table: dict | None = None
     name: str = ""
@@ -277,7 +278,45 @@ def _exhibit_inner_natural(ctx: Ctx, b: dict, w: float, wide: bool) -> float:
         return _kpis(ctx, b, 0, 0, w, wide)[1]
     if b["type"] == "table":
         return _table(ctx, b, 0, 0, w)[1]
+    if b["type"] == "image":
+        ratio = _ratio(b)
+        return (b["height"] if b.get("height") else w / ratio) if ratio else w * 0.6
     return charts.natural_height(b, width_px=w, text_px=ctx.chart_px)
+
+
+def _ratio(b: dict) -> float:
+    """Width / height of an image block's picture (0 when it cannot be read)."""
+    try:
+        from PIL import Image
+        with Image.open(b["file"]) as im:
+            return im.width / im.height
+    except (OSError, KeyError, ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def _floats(ctx: Ctx, b: dict, area: tuple) -> list[Op]:
+    """Floating number boxes over an exhibit: `area` is the chart's or picture's box; x, y in percent of it."""
+    ops: list[Op] = []
+    ax, ay, aw, ah = area
+    for f in b.get("floats") or []:
+        hi = bool(f.get("hi"))
+        sn = ctx.st("kpi_n", size=46, color="paper" if hi else "primary")
+        stt = ctx.st("kpi_t", size=19, color="paper" if hi else "ink_soft")
+        w = max(260.0, aw * 0.40)
+        paras = [Para([(str(f["n"]), sn)], sn)] + ([Para([(str(f["t"]), stt)], stt, before=8)] if f.get("t") else [])
+        tw = w - 18 - 22
+        th = sum(p.before + ctx.para_h(p, tw) for p in paras)
+        h = th + 28
+        x = ax + aw * float(f["x"]) / 100
+        if f.get("align") == "right":
+            x -= w
+        elif f.get("align") == "center":
+            x -= w / 2
+        y = ay + ah * float(f["y"]) / 100
+        ops.append(Op("rect", (x, y, w, h), color=ctx.hex("primary" if hi else "paper"), name="Zahl" if ctx.german else "Number"))
+        ops.append(Op("rect", (x, y, 6, h), color=ctx.hex("accent"), name="Akzent" if ctx.german else "Accent"))
+        ops.append(Op("text", (x + 18, y + 14, tw, th), paras, name="Zahl Text" if ctx.german else "Number text"))
+    return ops
 
 
 @dataclass
@@ -305,7 +344,7 @@ def _plan_block(ctx: Ctx, b: dict, w: float, *, number, source: str, note: str, 
         inner = _exhibit_inner_natural(ctx, b, inner_w, wide)
         is_chart = t in charts.CHART_TYPES
         natural = head + pady + inner + src_h
-        minimum = head + pady + (inner * 0.7 if is_chart else inner) + src_h
+        minimum = head + pady + (inner * 0.7 if is_chart or t == "image" else inner) + src_h
 
         def draw(x, y, ww, hh):
             ops, probs = [], []
@@ -318,8 +357,16 @@ def _plan_block(ctx: Ctx, b: dict, w: float, *, number, source: str, note: str, 
                 ops.append(Op("rect", (x, py, ww, ph), color=ctx.panel_color, name="Panel"))
             ix, iy = x + (sp["panel_left"] if ctx.panel else 0), py + (sp["panel_top"] if ctx.panel else 0)
             ih = ph - pady
-            if is_chart:
+            if t == "image":
+                ratio = _ratio(b) or inner_w / max(ih, 1)
+                pw = min(inner_w, ih * ratio)
+                ph_ = pw / ratio
+                pic = (ix + (inner_w - pw) / 2, iy + (ih - ph_) / 2, pw, ph_)
+                ops.append(Op("image", pic, alt=str(b.get("alt") or _alt(b)), file=str(b.get("file") or ""), name=f"picture_{slide_n}_{k}"))
+                ops += _floats(ctx, b, pic)
+            elif is_chart:
                 ops.append(Op("image", (ix, iy, inner_w, ih), block=chart_block, alt=_alt(b), name=f"chart_{slide_n}_{k}"))
+                ops += _floats(ctx, b, (ix, iy, inner_w, ih))
             else:
                 sub, used, p2 = (_kpis(ctx, b, ix, 0, inner_w, wide) if t == "kpis" else _table(ctx, b, ix, 0, inner_w))
                 off = iy + max((ih - used) / 2, 0) if (b.get("grow") and ctx.panel) else iy
@@ -780,7 +827,12 @@ def render_pptx(doc, template: dict, design: dict, out: Path) -> tuple[list[Path
     images: dict[str, Path] = {}
     for pl in plans:
         for op in pl.ops:
-            if op.kind == "image":
+            if op.kind == "image" and op.file:                 # a picture placed as it is (copied beside the charts)
+                chart_dir.mkdir(parents=True, exist_ok=True)
+                f = chart_dir / f"{prefix}_s{pl.n}_{Path(op.file).name}"
+                shutil.copyfile(op.file, f)
+                images[op.name] = f
+            elif op.kind == "image":
                 x, y, w, h = op.box
                 f = chart_dir / f"{prefix}_s{pl.n}_{op.name.rsplit('_', 1)[-1]}.png"
                 charts.render(op.block, design=design, width_px=round(w), height_px=round(h), out=f, lang=ctx.lang,

@@ -381,6 +381,11 @@ def cmd_pack(a):
                 for name in done["skills"]:
                     how = _place(config.hub().registry / "skills" / name, claude / name)
                     print(f"skill {name} -> {claude / name}" + (" (copied: run `sb pack install` again after an update)" if how == "copied" else ""))
+            manifest = _pack_manifest(a.folder)
+            if (manifest or {}).get("requires"):
+                from . import toolkits
+                for ok, text in toolkits.requirements(manifest):
+                    print(("needs  " if ok else "MISSING ") + text)
             prev = done.get("previous")
             if done.get("source_differs") and prev:
                 print(f"note: the content differs from what was installed on {str(prev.get('installed', ''))[:10]} "
@@ -393,6 +398,22 @@ def cmd_pack(a):
             print("wrote", assets.export_pack(a.folder, designs_=a.design or [], templates_=a.template or [], skills_=a.skill or []))
     except (ValueError, OSError) as e:
         _fail(e)
+
+
+def _pack_manifest(source) -> dict:
+    """pack.yaml of a pack folder or zip (empty when there is none)."""
+    import yaml
+    p = Path(source)
+    try:
+        if p.is_dir():
+            f = p / "pack.yaml"
+            return (yaml.safe_load(f.read_text(encoding="utf-8")) or {}) if f.is_file() else {}
+        import zipfile
+        with zipfile.ZipFile(p) as z:
+            name = next((n for n in z.namelist() if n.rstrip("/").split("/")[-1] == "pack.yaml" and n.count("/") <= 1), None)
+            return (yaml.safe_load(z.read(name).decode("utf-8")) or {}) if name else {}
+    except (OSError, ValueError, KeyError, yaml.YAMLError):
+        return {}
 
 
 def config_path():
@@ -415,6 +436,7 @@ def cmd_plugin(a):
         print(f"{p.name:<14} {p.package} {p.version}  " + (f"ERROR: {p.error}" if p.error else
               f"renders: {', '.join(p.renderers) or '-'}; commands: {', '.join(p.commands) or '-'}"
               + (f"; charts: {', '.join(p.chart_renderers)}" if p.chart_renderers else "")
+              + (f"; toolkits: {', '.join(p.toolkits)}" if p.toolkits else "")
               + (f"; brings {len(p.packs)} pack" if p.packs else "")))
     print(f"{len(reg.plugins)} plugins; formats: {', '.join(sorted(reg.renderers))}")
     if not reg.plugins:
