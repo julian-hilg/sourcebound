@@ -298,11 +298,11 @@ def _font_props(design: dict):
     bold_named = next((n for n in head if n not in body), None)         # a heading face of its own ("Firm-Bold")
     bold = first([bold_named], 400) if bold_named else None
     bold = bold or first(head or body, 700)
-    regular = FontProperties(fname=str(reg)) if reg else FontProperties(family="sans-serif")
+    regular = FontProperties(fname=str(reg)) if reg else FontProperties(family=["sans-serif"])
     if bold and bold != reg:
         strong = FontProperties(fname=str(bold))
     else:
-        strong = FontProperties(fname=str(reg), weight="bold") if reg else FontProperties(family="sans-serif", weight="bold")
+        strong = FontProperties(fname=str(reg), weight="bold") if reg else FontProperties(family=["sans-serif"], weight="bold")
     return regular, strong
 
 
