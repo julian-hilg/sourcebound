@@ -81,8 +81,13 @@ hypotheses to freeze, no gates G1 and G2 and no paper. What stays:
   YAML contract in the registry (`<registry>/contracts/<schema>/`) before the first write. Project tables use
   `proj_<slug>` and live in the project's `contracts/`.
 - **Shared vs project.** Data useful beyond one study (benchmarks, prices, geography) is a
-  shared table with a hub pipeline. Project-specific derivations stay in `proj_<slug>`.
-  Promote a project table by moving its contract and pipeline to the hub.
+  shared table: its contract goes into the registry. Project-specific derivations stay in `proj_<slug>`.
+  Promote a project table by moving its contract to the registry.
+- **The Sourcebound checkout holds no project work.** It is a public repository: its
+  `pipelines/`, `contracts/` and `datasources/` hold only the ECB example, and git ignores
+  anything else there. Write a pipeline into the project that needs it (`<project>/pipelines/`),
+  also when its table is shared; contracts and source entries go into the registry. Never put a
+  project, a pipeline, data or a source entry of the user's into the checkout.
 - Read and write only through `sourcebound.lake` (lineage is recorded automatically).
   Apps read the same catalog (`docs/data-access.md`).
 - No personal data unless the brief explicitly allows it; pseudonymise individuals.

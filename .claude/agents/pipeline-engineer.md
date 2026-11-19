@@ -18,7 +18,8 @@ and the reference implementation `pipelines/ecb_fx/` (in `sb which home`) before
 1. **Contract** `contracts/<schema>/<table>.yaml` (in the registry for shared domains, in the project for
    `proj_<slug>`): title, description, grain, primary key, licence, sources, every column
    with type, unit and meaning, `raw_ref` column.
-2. **Pipeline** `pipelines/<source>/pipeline.py`:
+2. **Pipeline** `<project>/pipelines/<source>/pipeline.py`, in the project that needs it, never in the
+   Sourcebound checkout (a public repository; its `pipelines/` holds only the ECB example):
    - fetch only through `sourcebound.fetch.Fetcher(source_id)`; few requests by design
      (it adds the token named in the register entry; read the archived documentation in
      `<registry>/datasources/<id>/docs/` first);

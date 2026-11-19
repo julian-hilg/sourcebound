@@ -39,6 +39,17 @@ __pycache__/
 .env
 .venv/
 .DS_Store
+# Pipelines, contracts and source entries of your own work stay out of this repository: only the
+# ECB example is tracked. Real ones live in the registry of the data root, a private folder or the
+# project they belong to.
+pipelines/*
+!pipelines/ecb_fx/
+contracts/*
+!contracts/market/
+contracts/market/*
+!contracts/market/ecb_fx_daily.yaml
+datasources/*
+!datasources/ecb_data_portal.yaml
 templates/project/results/*
 templates/project/tables/*
 templates/project/figures/*.pdf
