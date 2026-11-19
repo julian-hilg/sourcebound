@@ -106,6 +106,11 @@ Werkbank's bridge on `127.0.0.1:8787`, which serves MCP. The *Assistant setup* w
 app gives the command that registers it with Claude Code or another agent; the Assistant
 panel talks to a coding agent from inside the app.
 
+The page reaches the bridge through its own address (`/__bridge`, passed on by `sb ui` or the dev
+server), which names the frontend folder to the bridge. The bridge then keeps the assistant's
+conversations, and a copy of workspaces and settings, in `frontend/.werkbank/` (private, ignored
+by git), so they survive clearing the browser. Settings, *Assistant*, switch either off.
+
 | Command | Does | Risk class |
 | --- | --- | --- |
 | `sb.check`, `sb.reviewEdits`, `data.refresh`, `vscode.workspace` | read and report | read: an agent runs it freely |
@@ -138,7 +143,9 @@ npm run typecheck && npm run build
 
 Werkbank is a dependency (`@werkbank/framework`, `@werkbank/bridge`), never edited here.
 The two packages come from Werkbank's GitHub releases; `npm run werkbank:update` moves the
-app to the newest one.
+app to the newest one, then `sb ui --build`. The status bar says when a newer release is out
+(`sb ui` asks GitHub's public release list at most twice a day; Settings, *Updates* switches it
+off), and `sb ui` names it when it starts.
 
 ## Limits
 

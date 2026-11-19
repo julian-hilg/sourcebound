@@ -54,3 +54,6 @@ templates/project/results/*
 templates/project/tables/*
 templates/project/figures/*.pdf
 templates/project/deliverables/*.pdf
+
+# the Werkbank bridge keeps conversations, workspaces and settings here (per machine, private)
+.werkbank/

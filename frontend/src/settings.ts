@@ -62,6 +62,9 @@ export const appSettings: SettingSpec<any>[] = [
   { key: "fetchlog.defaultOutcome", title: "A new Fetch log panel shows", section: "Fetch log", default: "all", ...choice(["all", "refused"], { all: "All requests", refused: "Refused or failed requests only" }) },
   { key: "fetchlog.maxRows", title: "Requests shown", section: "Fetch log", description: "The service returns the newest 200 per source.", schema: z.number().int().min(20).max(1000), default: 200 },
 
+  // ---- updates
+  { key: "werkbank.checkReleases", title: "Check for new Werkbank releases", section: "Updates", description: "Asks GitHub's public release list twice a day and says in the status bar when a newer Werkbank framework is out. Nothing about this machine is sent.", schema: z.boolean(), default: true },
+
   // ---- pieces
   { key: "pieces.followWorkspace", title: "Workspace for a piece an agent works on", section: "Pieces", description: "Where the app goes when it follows an agent and no Pieces panel is open.", default: "Post studio", ...choice(WORKSPACES, workspaceLabels) },
   { key: "pieces.follow", title: "Show what an agent works on", section: "Pieces", description: "When an agent renders a piece or runs `sb piece open`, select that project and piece and show its post preview.", schema: z.boolean(), default: true },

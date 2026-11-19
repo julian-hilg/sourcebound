@@ -2125,3 +2125,26 @@ def test_the_documentation_shows_sourcebounds_pages_and_those_of_packs(hub, tmp_
         zf.writestr("docs/run.py", "print(1)")
     with pytest.raises(ValueError, match="docs/<id>.md"):
         packzip.check(bad)
+
+
+def test_the_werkbank_release_check_compares_the_pinned_version_with_the_newest(monkeypatch, tmp_path):
+    import io
+    import json as _json
+    from sourcebound import config, ui
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "package.json").write_text(_json.dumps({"werkbank": {"repo": "someone/werkbank"}, "dependencies": {
+        "@werkbank/framework": "https://github.com/someone/werkbank/releases/download/v0.7.0/werkbank-framework-0.7.0.tgz"}}))
+    monkeypatch.setattr(config, "home", lambda: tmp_path)
+    asked = []
+
+    def answer(req, timeout):
+        asked.append(req.full_url)
+        return io.BytesIO(b'{"tag_name": "v0.10.0", "html_url": "https://example.org/r"}')
+    monkeypatch.setattr("urllib.request.urlopen", answer)
+    ui._release.clear()
+    r = ui.werkbank_release()
+    assert (r["installed"], r["latest"], r["newer"]) == ("0.7.0", "0.10.0", True)        # 0.10 > 0.7, not by text
+    assert asked == ["https://api.github.com/repos/someone/werkbank/releases/latest"]
+    ui.werkbank_release()
+    assert len(asked) == 1                                                                 # asked again only after 12 hours
+    assert ui.werkbank_release(offline=True)["installed"] == "0.7.0"

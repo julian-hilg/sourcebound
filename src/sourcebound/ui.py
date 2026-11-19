@@ -633,6 +633,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local():
             return self._json({"error": "this server answers local requests only"}, 403)
         url = urlparse(self.path)
+        if url.path == "/__bridge" and method == "GET" and (self.headers.get("Upgrade") or "").lower() == "websocket":
+            return self._tunnel()
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
         parts = [unquote(x) for x in url.path.strip("/").split("/")]
         try:
@@ -695,6 +697,8 @@ class Handler(BaseHTTPRequestHandler):
                 case ("GET", "docs"):
                     from . import assets
                     self._json({"pages": assets.doc_pages()})
+                case ("GET", "werkbank"):
+                    self._json(werkbank_release(refresh=q.get("refresh") == "1"))
                 case ("GET", "focus"):
                     from . import pieces
                     self._json({"focus": pieces.current_focus()})
@@ -719,6 +723,47 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "the command did not finish within 15 minutes"}, 504)
         except Exception as e:                       # the next request must still be answered
             self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def _tunnel(self) -> None:
+        """The page's WebSocket to the agent bridge, passed through byte for byte. The request goes on as the
+        browser sent it (Host and Origin unchanged: the bridge checks that the page came from this server),
+        with the bridge's folder named in the header a page cannot set itself."""
+        import socket
+        try:
+            up = socket.create_connection(("127.0.0.1", bridge_port()), timeout=5)
+        except OSError:
+            return self._json({"error": "the agent bridge is not running"}, 502)
+        up.settimeout(None)
+        head = [f"{self.command} {self.path} HTTP/1.1"]
+        head += [f"{k}: {v}" for k, v in self.headers.items() if k.lower() != "x-werkbank-home"]
+        if BRIDGE_HOME:
+            head.append(f"x-werkbank-home: {BRIDGE_HOME}")
+        client = self.connection
+        client.settimeout(None)
+
+        def pipe(src, dst):
+            try:
+                while chunk := src.recv(65536):
+                    dst.sendall(chunk)
+            except OSError:
+                pass
+            finally:
+                for s in (src, dst):
+                    try:
+                        s.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
+        try:
+            # a browser sends nothing more before the bridge's 101 answer, so nothing is left in rfile's buffer
+            up.sendall(("\r\n".join(head) + "\r\n\r\n").encode("latin-1"))
+            back = threading.Thread(target=pipe, args=(up, client), daemon=True)
+            back.start()
+            pipe(client, up)
+            back.join()
+        finally:
+            up.close()
+            self.close_connection = True
 
     def _static(self, path: str) -> None:
         dist = dist_dir()
@@ -791,8 +836,31 @@ def _cwd(cmd: list[str], folder: Path) -> Path:
     return Path(os.environ.get("SystemRoot", "C:\\Windows")) if _in_wsl(cmd) else folder
 
 
+#: The bridge's folder as the bridge itself spells it (a Linux path when it runs in WSL). The page's
+#: connection goes through this server, which names the folder to the bridge (the header the Werkbank
+#: dev server sets too): with it the bridge keeps the assistant's conversations, workspaces and settings
+#: in frontend/.werkbank/ instead of the browser only. None: not known, the page then works as before.
+BRIDGE_HOME: str | None = None
+
+
+def bridge_port() -> int:
+    """The bridge's port, read as the bridge reads it: BRIDGE_PORT, "werkbank.bridgePort" in package.json, 8787."""
+    import os
+    if os.environ.get("BRIDGE_PORT", "").isdigit():
+        return int(os.environ["BRIDGE_PORT"])
+    home = config.home()
+    try:
+        port = json.loads((home / "frontend" / "package.json").read_text(encoding="utf-8"))["werkbank"]["bridgePort"]
+        if isinstance(port, int) and 0 < port < 65536:
+            return port
+    except (OSError, KeyError, TypeError, ValueError, AttributeError):
+        pass
+    return 8787
+
+
 def _bridge() -> subprocess.Popen | None:
     """The Werkbank agent bridge, if the frontend's packages are installed (agents drive the app through it)."""
+    global BRIDGE_HOME
     home = config.home()
     if home is None or not (home / "frontend" / "package.json").exists():
         return None
@@ -801,14 +869,102 @@ def _bridge() -> subprocess.Popen | None:
     if node is None:
         return None
     if _in_wsl(node):
-        # node_modules may live on the Linux side only (invisible from Windows): ask WSL whether it is there
-        probe = node[:4] + [f'cd "$(wslpath -u "$1")" && test -f {BRIDGE_SCRIPT}', "bash", node[-1]]
-        if subprocess.run(probe, cwd=_cwd(probe, front), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        # node_modules may live on the Linux side only (invisible from Windows): ask WSL whether it is there,
+        # and how the folder is spelled there (the bridge's own name for its home)
+        probe = node[:4] + [f'cd "$(wslpath -u "$1")" && test -f {BRIDGE_SCRIPT} && pwd -P', "bash", node[-1]]
+        found = subprocess.run(probe, cwd=_cwd(probe, front), capture_output=True, text=True)
+        if found.returncode:
             return None
+        lines = found.stdout.strip().splitlines()
+        BRIDGE_HOME = lines[-1].strip() if lines and lines[-1].startswith("/") else None
     elif not (front / BRIDGE_SCRIPT).exists():
         return None
+    else:
+        import os
+        BRIDGE_HOME = os.path.realpath(front)
+    stale = _bridge_version()
+    if stale and stale != werkbank_release(offline=True)["installed"]:
+        # a bridge of this folder from before a Werkbank update (one outlives `wsl.exe` being stopped):
+        # it would keep the port and serve the old version, so it goes and the installed one starts
+        stop_bridge(node)
     return subprocess.Popen(node + [BRIDGE_SCRIPT, "--hub"], cwd=_cwd(node, front),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _bridge_version() -> str | None:
+    """The version of the bridge answering on the bridge port, if one does."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{bridge_port()}/health", timeout=1.5) as r:
+            body = json.loads(r.read().decode("utf-8"))
+        return body.get("version") if body.get("name") == "werkbank-bridge" else None
+    except (OSError, ValueError):
+        return None
+
+
+def stop_bridge(node: list[str] | None = None) -> None:
+    """Ends the bridge processes of this checkout's frontend folder (and no other app's): in WSL, stopping
+    `wsl.exe` leaves its `node` running, so they are found by their working folder there."""
+    import time
+    home = config.home()
+    if home is None or not BRIDGE_HOME:
+        return
+    node = node or _node_tool("node", home / "frontend")
+    if not node:
+        return
+    if _in_wsl(node):
+        script = ('for p in $(pgrep -f "bridge/src/server.js"); do '
+                  '[ "$(readlink /proc/$p/cwd)" = "$1" ] && kill $p; done; true')
+        subprocess.run(["wsl.exe", "--exec", "bash", "-c", script, "bash", BRIDGE_HOME],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+    for _ in range(25):                              # until the port is free
+        if _bridge_version() is None:
+            return
+        time.sleep(0.2)
+
+
+# ------------------------------------------------------------------ Werkbank releases
+WERKBANK_REPO = "julian-hilg/werkbank"
+_release: dict = {}                                  # the last answer from GitHub, and when it came
+
+
+def werkbank_release(*, refresh: bool = False, offline: bool = False) -> dict:
+    """The Werkbank version the frontend is pinned to and the newest release, asked at most every 12 hours.
+
+    Only the public release list of the framework's repository is read; nothing about this machine is sent."""
+    import time
+    import urllib.request
+    home = config.home()
+    repo, installed = WERKBANK_REPO, None
+    try:
+        manifest = json.loads((home / "frontend" / "package.json").read_text(encoding="utf-8"))
+        repo = (manifest.get("werkbank") or {}).get("repo") or repo
+        m = re.search(r"/v?(\d+\.\d+\.\d+)/|-(\d+\.\d+\.\d+)\.tgz$", manifest["dependencies"]["@werkbank/framework"])
+        installed = (m.group(1) or m.group(2)) if m else None
+    except (OSError, KeyError, TypeError, ValueError, AttributeError):
+        pass
+    now = time.time()
+    fresh = _release.get("repo") == repo and now - _release.get("at", 0) < (3600 if _release.get("error") else 12 * 3600)
+    if not offline and (refresh or not fresh):
+        try:
+            req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest",
+                                         headers={"Accept": "application/vnd.github+json", "User-Agent": "sourcebound"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                body = json.loads(r.read().decode("utf-8"))
+            _release.clear()
+            _release.update(repo=repo, at=now, latest=str(body.get("tag_name", "")).lstrip("v") or None,
+                            url=body.get("html_url"), published=body.get("published_at"))
+        except (OSError, ValueError) as e:
+            _release.clear()
+            _release.update(repo=repo, at=now, error=f"GitHub did not answer ({type(e).__name__})")
+
+    def key(v):
+        return tuple(int(x) for x in v.split(".")) if v else ()
+    latest = _release.get("latest")
+    return {"repo": repo, "installed": installed, "latest": latest, "url": _release.get("url"),
+            "published": _release.get("published"), "error": _release.get("error"),
+            "newer": bool(installed and latest and key(latest) > key(installed)),
+            "update": "npm run werkbank:update   (in the frontend folder, then sb ui --build)"}
 
 
 def build_frontend() -> None:
@@ -902,6 +1058,12 @@ def serve(port: int = PORT, *, open_browser: bool = True, bridge: bool = True) -
     if open_browser:
         import webbrowser
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+
+    def release_note():
+        r = werkbank_release()
+        if r["newer"]:
+            print(f"Werkbank {r['latest']} is out (this app runs {r['installed']}): {r['update']}", flush=True)
+    threading.Thread(target=release_note, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -909,4 +1071,5 @@ def serve(port: int = PORT, *, open_browser: bool = True, bridge: bool = True) -
     finally:
         if child:
             child.terminate()
+            stop_bridge()
         server.server_close()

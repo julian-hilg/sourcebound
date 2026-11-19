@@ -134,7 +134,7 @@ const ABOUT = `# Sourcebound
 
 This app shows the research on this machine: studies and desks, what they claim and on what evidence, the recorded results, reviews, deliverables and pieces, the data lake and where its data comes from, what was fetched, what is installed, and what the agents are doing right now.
 
-**It has no data of its own.** Everything on screen is read from the project files, the data root and the registry by the local service that \`sb ui\` starts. Nothing is stored in the browser except your layout and your settings. The app writes only what the command line writes too: deliverable notes (\`sb note\`), pieces (\`sb piece\`), renders (\`sb render\`), the handover (\`sb handover\`) and the VS Code workspace (\`sb workspace\`).
+**It has no data of its own.** Everything on screen is read from the project files, the data root and the registry by the local service that \`sb ui\` starts. The app itself keeps only your layout, your settings and the assistant's conversations: in this browser, and with the agent bridge running also on disk in \`frontend/.werkbank/\` of the checkout (private to you, never committed), so they survive clearing the browser and another browser. The app writes only what the command line writes too: deliverable notes (\`sb note\`), pieces (\`sb piece\`), renders (\`sb render\`), the handover (\`sb handover\`) and the VS Code workspace (\`sb workspace\`).
 
 ## Two kinds of project
 

@@ -11,6 +11,7 @@ export function ServiceStatus() {
     <>
       <FollowFocus />
       <NewBuild />
+      <WerkbankRelease />
       <button className={`wb-status-button${online === false ? " wb-status-warn" : ""}`} title="The local Sourcebound service that reads the project files. Click to reload." onClick={() => void wb.run("data.refresh")}>
         {online === false ? "data: not reachable (start sb ui)" : online ? "data: live" : "data: connecting"}
       </button>
@@ -35,6 +36,27 @@ function NewBuild() {
   return (
     <button className="wb-status-button wb-status-warn" title={`This page runs ${LOADED}; the service now serves ${served}. Your layout and settings are kept.`} onClick={() => location.reload()}>
       new version: reload
+    </button>
+  );
+}
+
+interface Release {
+  installed: string | null;
+  latest: string | null;
+  newer: boolean;
+  url?: string | null;
+  update: string;
+}
+
+/** A newer Werkbank release than the one the frontend is built on: named in the status bar. Off under Settings, Updates. */
+function WerkbankRelease() {
+  const [check] = useSetting<boolean>("werkbank.checkReleases");
+  const entry = useApi<Release>(check ? paths.werkbank : null, 6 * 3600_000);
+  const r = entry.data;
+  if (!check || !r?.newer) return null;
+  return (
+    <button className="wb-status-button" title={`This app runs Werkbank ${r.installed}; ${r.latest} is out. To update: ${r.update}. Click for the release notes.`} onClick={() => r.url && window.open(r.url, "_blank", "noopener")}>
+      Werkbank {r.latest} available
     </button>
   );
 }

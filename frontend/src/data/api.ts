@@ -178,6 +178,7 @@ export const paths = {
   activity: "/api/activity",
   focus: "/api/focus",
   health: "/api/health",
+  werkbank: "/api/werkbank",
   docs: "/api/docs",
   workspace: "/api/workspace",
   system: "/api/system",
